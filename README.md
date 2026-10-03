@@ -5,6 +5,8 @@ con el catálogo de herramientas de iLovePDF / iLoveIMG más una herramienta pro
 
 Electron + Vite + React + TypeScript. Tema claro y oscuro (se recuerda la elección). El plan original está en [PLAN.md](PLAN.md).
 
+![Inicio en tema claro](docs/capturas/home-claro.png)
+
 ## Herramientas
 
 | Categoría | Herramienta | Motor |
@@ -41,6 +43,8 @@ Todo en JavaScript, sin dependencias externas (`src/lib/epub/`):
 6. **Empaquetado** con `jszip` (`mimetype` primero y sin comprimir): `container.xml`, `content.opf` (EPUB 3 + NCX), `nav.xhtml`, capítulos XHTML, CSS, portada (primera página) y metadatos editables (título, autor, idioma detectado).
 7. Dos modos: **texto adaptable** (por defecto) y **diseño fijo** (`pre-paginated`, cada página como imagen).
 8. **OCR sin conexión** (`tesseract.js` con el núcleo y los datos de español e inglés incluidos) para PDF escaneados; apagado por defecto y solo para páginas sin texto.
+
+![PDF a EPUB](docs/capturas/pdf-a-epub.png)
 
 Validado con **epubcheck 5.2.1 (0 errores, 0 avisos)** sobre libros generados con LibreOffice (justificados y sin justificar, con y sin marcadores,
 cabecera, pie, columnas, listas e imagen), el modo de diseño fijo, un PDF escaneado y un PDF sin estructura.

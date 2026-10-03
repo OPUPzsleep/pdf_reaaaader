@@ -92,6 +92,9 @@ que dependa de un programa que falte lo avisa en pantalla (también detecta Libr
 Tamaño estimado del instalador: **700 MB – 1 GB** (LibreOffice ≈ 400 MB, modelo ≈ 170 MB, Electron ≈ 100 MB, Ghostscript ≈ 40 MB). Si es demasiado, lo más fácil
 es quitar `libreoffice` de `resources` y dejar que la app use el LibreOffice instalado, o pasar LibreOffice y el modelo a una descarga en el primer uso.
 
+Si `npm run dist` falla con «Cannot create symbolic link» (al extraer winCodeSign), abre PowerShell como administrador o activa el **Modo desarrollador** de Windows
+(Configuración → Privacidad y seguridad → Para programadores); es un requisito de electron-builder, no de la app.
+
 El repositorio incluye un flujo de GitHub Actions (`.github/workflows/windows.yml`) que ejecuta todo esto en un Windows limpio y sube el instalador como artefacto.
 
 ## Estructura

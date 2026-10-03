@@ -43,8 +43,7 @@ win:
       arch: [x64]
     - target: portable
       arch: [x64]
-  # Al compilar desde Linux no hay Wine para editar el .exe; en Windows se puede dejar en true.
-  signAndEditExecutable: false
+  # En Windows se edita el .exe (icono y versión). Si compilas desde Linux, sin Wine: -c.win.signAndEditExecutable=false
 
 nsis:
   oneClick: false

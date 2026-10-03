@@ -77,7 +77,7 @@ export interface SolicitudHtml {
 }
 
 export interface EstadoBinario {
-  id: 'libreoffice' | 'ghostscript' | 'realesrgan' | 'modelo-fondo';
+  id: 'ghostscript' | 'realesrgan' | 'modelo-fondo';
   nombre: string;
   disponible: boolean;
   ruta?: string;
@@ -85,8 +85,6 @@ export interface EstadoBinario {
 }
 
 export type PerfilCompresion = 'bajo' | 'medio' | 'alto';
-
-export type DestinoOffice = 'docx' | 'pptx' | 'xlsx';
 
 export interface PdfreaaaaderApi {
   esElectron: true;
@@ -106,8 +104,6 @@ export interface PdfreaaaaderApi {
     estado(): Promise<EstadoBinario[]>;
     comprimirPdf(id: string, datos: Uint8Array, perfil: PerfilCompresion): Promise<{ datos: Uint8Array; reducido: boolean }>;
     pdfAPdfA(id: string, datos: Uint8Array): Promise<Uint8Array>;
-    officeAPdf(id: string, datos: Uint8Array, extension: string): Promise<Uint8Array>;
-    pdfAOffice(id: string, datos: Uint8Array, destino: DestinoOffice): Promise<Uint8Array>;
   };
   ia: {
     quitarFondo(id: string, datos: Uint8Array): Promise<Uint8Array>;

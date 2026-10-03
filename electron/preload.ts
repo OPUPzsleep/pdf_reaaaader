@@ -19,8 +19,6 @@ const api: PdfreaaaaderApi = {
     estado: () => ipcRenderer.invoke('externos:estado'),
     comprimirPdf: (id, datos, perfil) => ipcRenderer.invoke('externos:comprimir', id, datos, perfil),
     pdfAPdfA: (id, datos) => ipcRenderer.invoke('externos:pdfa', id, datos),
-    officeAPdf: (id, datos, ext) => ipcRenderer.invoke('externos:office-a-pdf', id, datos, ext),
-    pdfAOffice: (id, datos, destino) => ipcRenderer.invoke('externos:pdf-a-office', id, datos, destino),
   },
   ia: {
     quitarFondo: (id, datos) => ipcRenderer.invoke('ia:quitar-fondo', id, datos),

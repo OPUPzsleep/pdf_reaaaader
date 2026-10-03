@@ -10,6 +10,8 @@ import type { ProveedorRender } from '../../src/lib/epub/tipos';
 import type { OperadoresPdf } from '../../src/lib/epub/extraer';
 import { MotorOcr } from '../../src/lib/epub/ocr';
 
+const OPS_TEXTO = new Set<number>([pdfjs.OPS.showText, pdfjs.OPS.showSpacedText, pdfjs.OPS.nextLineShowText, pdfjs.OPS.nextLineSetSpacingShowText]);
+
 export const OPS_NODE: OperadoresPdf = {
   save: pdfjs.OPS.save,
   restore: pdfjs.OPS.restore,
@@ -65,6 +67,35 @@ export function renderNode(doc: PDFDocumentProxy, ocr?: { idioma: string }): Pro
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       await pagina.render({ canvas: canvas as never, canvasContext: ctx as never, viewport: vp, background: '#ffffff' }).promise;
       return { datos: new Uint8Array(canvas.toBuffer('image/jpeg', 80)), ancho: canvas.width, alto: canvas.height };
+    },
+    async paginaSinTextoAJpeg(indice, anchoPx) {
+      const pagina = await doc.getPage(indice + 1);
+      const v1 = pagina.getViewport({ scale: 1 });
+      const vp = pagina.getViewport({ scale: anchoPx / v1.width });
+      const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await pagina.render({
+        canvas: canvas as never, canvasContext: ctx as never, viewport: vp, background: '#ffffff',
+        operationsFilter: (i, lista) => !OPS_TEXTO.has(lista.fnArray[i]),
+      }).promise;
+      return { datos: new Uint8Array(canvas.toBuffer('image/jpeg', 80)), ancho: canvas.width, alto: canvas.height };
+    },
+    async paginaRgba(indice, anchoPx, sinTexto) {
+      const pagina = await doc.getPage(indice + 1);
+      const v1 = pagina.getViewport({ scale: 1 });
+      const vp = pagina.getViewport({ scale: anchoPx / v1.width });
+      const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await pagina.render({
+        canvas: canvas as never, canvasContext: ctx as never, viewport: vp, background: '#ffffff',
+        operationsFilter: sinTexto ? (i, lista) => !OPS_TEXTO.has(lista.fnArray[i]) : undefined,
+      }).promise;
+      const datos = ctx.getImageData(0, 0, canvas.width, canvas.height).data as unknown as Uint8ClampedArray;
+      return { ancho: canvas.width, alto: canvas.height, datos };
     },
     async regionAImagen(indice, r, anchoPx) {
       const pagina = await doc.getPage(indice + 1);

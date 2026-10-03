@@ -14,6 +14,9 @@ export interface Tabla {
   /** Altura (y hacia arriba) de la primera y de la última fila */
   yArriba: number;
   yAbajo: number;
+  /** Si la tabla continúa en otras páginas: página y altura donde empieza (para colocarla en el orden de lectura) */
+  paginaInicial?: number;
+  yInicial?: number;
 }
 
 interface CeldaCruda {
@@ -38,7 +41,14 @@ export interface PaginaTablas {
 }
 
 /** Une los fragmentos próximos de una línea en celdas; las separaciones anchas delimitan celdas distintas. */
-function filasCrudas(pagina: PaginaExtraida): FilaCruda[] {
+const SOLO_MARCADOR = /^(?:[•·▪◦‣⁃●○■□▸►\-–—*]|\(?(?:\d{1,3}|[a-zA-Z]|[ivxIVX]{1,5})[.)])$/;
+
+export interface OpcionesDeteccion {
+  /** Une la viñeta o el número de una lista («•», «1.») con su texto: no son una columna de tabla */
+  fusionarMarcadores?: boolean;
+}
+
+function filasCrudas(pagina: PaginaExtraida, o: OpcionesDeteccion = {}): FilaCruda[] {
   const filas: FilaCruda[] = [];
   for (const g of agruparPorY(pagina.fragmentos)) {
     const frags = g.frags.filter((f) => limpiarTexto(f.texto).trim()).sort((a, b) => a.x - b.x);
@@ -61,6 +71,10 @@ function filasCrudas(pagina: PaginaExtraida): FilaCruda[] {
     }
     for (const c of celdas) c.texto = c.texto.replace(/\s+/g, ' ').trim();
     const utiles = celdas.filter((c) => c.texto);
+    if (o.fusionarMarcadores && utiles.length >= 2 && SOLO_MARCADOR.test(utiles[0].texto)) {
+      const [m, t, ...resto] = utiles;
+      utiles.splice(0, utiles.length, { texto: `${m.texto} ${t.texto}`, x0: m.x0, x1: t.x1, negrita: t.negrita }, ...resto);
+    }
     if (utiles.length) filas.push({ y: g.y, tam: g.tam, celdas: utiles });
   }
   return filas.sort((a, b) => b.y - a.y);
@@ -135,8 +149,8 @@ function construirTabla(filas: FilaCruda[], pagina: number): Tabla | null {
 }
 
 /** Separa en cada página las tablas (filas con varias celdas alineadas en columnas) del resto del texto. */
-export function detectarTablas(pagina: PaginaExtraida): PaginaTablas {
-  const filas = filasCrudas(pagina);
+export function detectarTablas(pagina: PaginaExtraida, opciones: OpcionesDeteccion = {}): PaginaTablas {
+  const filas = filasCrudas(pagina, opciones);
   const bloques: FilaCruda[][] = [];
   let actual: FilaCruda[] = [];
   const cerrar = () => {
@@ -192,7 +206,7 @@ export function unirTablasEntrePaginas(paginas: PaginaTablas[]): Tabla[] {
         prev.yAbajo = t.yAbajo;
         prev.pagina = p.indice;
       } else {
-        resultado.push({ ...t, filas: [...t.filas], filasNegrita: [...t.filasNegrita], fusiones: [...t.fusiones] });
+        resultado.push({ ...t, paginaInicial: t.pagina, yInicial: t.yArriba, filas: [...t.filas], filasNegrita: [...t.filasNegrita], fusiones: [...t.fusiones] });
       }
     });
   }

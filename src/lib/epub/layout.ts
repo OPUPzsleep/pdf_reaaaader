@@ -522,7 +522,9 @@ function bloquesDePagina(
     const m = margenes[primera.columna];
     const tam = Math.max(...actual.map((l) => l.tam));
     const textoPlano = actual.map((l) => l.texto).join(' ');
-    const marca = marcadorDeLista(primera.texto);
+    let marca = marcadorDeLista(primera.texto);
+    // «1. Introducción» en grande o en negrita es un título numerado, no un elemento de lista
+    if (marca?.ordenado && actual.length === 1 && textoPlano.length <= 100 && !/[.:;,]$/.test(textoPlano.trim()) && (tam >= ctx.cuerpo * 1.12 && tam - ctx.cuerpo >= 1 ? true : actual[0].negrita && tam >= ctx.cuerpo - 0.5 && textoPlano.length <= 80)) marca = null;
 
     if (marca) {
       salida.push({ tipo: 'li', ordenado: marca.ordenado, spans: unirLineas(actual, marca.longitud), pagina: indicePagina, y: primera.y, tam });

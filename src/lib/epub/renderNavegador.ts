@@ -24,6 +24,31 @@ export function crearRenderNavegador(doc: PDFDocumentProxy, ocr?: { idioma: stri
       return r;
     },
 
+    async paginaSinTextoAJpeg(indice, anchoPx) {
+      const pagina = await doc.getPage(indice + 1);
+      const v1 = pagina.getViewport({ scale: 1 });
+      const canvas = document.createElement('canvas');
+      await dibujarPagina(pagina, canvas, anchoPx / v1.width, { fondo: '#ffffff', sinTexto: true });
+      const datos = await canvasABytes(canvas, 'image/jpeg', 0.85);
+      const r = { datos, ancho: canvas.width, alto: canvas.height };
+      canvas.width = canvas.height = 0;
+      pagina.cleanup();
+      return r;
+    },
+
+    async paginaRgba(indice, anchoPx, sinTexto) {
+      const pagina = await doc.getPage(indice + 1);
+      const v1 = pagina.getViewport({ scale: 1 });
+      const canvas = document.createElement('canvas');
+      await dibujarPagina(pagina, canvas, anchoPx / v1.width, { fondo: '#ffffff', sinTexto });
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+      const datos = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const r = { ancho: canvas.width, alto: canvas.height, datos };
+      canvas.width = canvas.height = 0;
+      pagina.cleanup();
+      return r;
+    },
+
     async regionAImagen(indice, r, anchoPx) {
       const pagina = await doc.getPage(indice + 1);
       const v1 = pagina.getViewport({ scale: 1 });

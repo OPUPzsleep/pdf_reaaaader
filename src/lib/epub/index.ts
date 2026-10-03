@@ -1,10 +1,10 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { dividirCapitulos } from './capitulos';
 import { arbolDeIndice, ensamblarEpub, type DocumentoSpine, type EntradaNav, type EspecEpub } from './ensamblar';
-import { extraerPagina, leerMarcadores, type OperadoresPdf } from './extraer';
-import { analizarDocumento } from './layout';
+import { leerMarcadores, type OperadoresPdf } from './extraer';
+import { leerDocumentoPdf } from './lectura';
 import { detectarIdioma, escaparXmlSeguro, limpiarTexto, normalizarClave, normalizarIdioma } from './texto';
-import type { Bloque, EntradaIndice, OpcionesEpub, PaginaExtraida, Progreso, ProveedorRender } from './tipos';
+import type { Bloque, EntradaIndice, OpcionesEpub, Progreso, ProveedorRender } from './tipos';
 import { bloquesAHtml, documentoXhtml, type ImagenEmpaquetada } from './xhtml';
 
 export * from './tipos';
@@ -130,36 +130,15 @@ async function convertir(e: EntradaConversion): Promise<ResultadoConversion> {
   }
 
   /* ───────── Texto adaptable ───────── */
-  const paginas: PaginaExtraida[] = [];
-  let paginasConOcr = 0;
-  for (let i = 1; i <= total; i++) {
-    comprobar(e.cancelado);
-    progreso(((i - 1) / total) * 0.5, `Leyendo página ${i} de ${total}`);
-    const pagina = await doc.getPage(i);
-    const extraida = await extraerPagina(pagina, ops, { imagenes: opciones.incluirImagenes });
-    pagina.cleanup();
-    const sinTexto = extraida.fragmentos.every((f) => !f.texto.trim());
-    if (sinTexto && opciones.ocr && render.ocrPagina) {
-      progreso(((i - 1) / total) * 0.5, `Reconociendo texto (OCR) en la página ${i} de ${total}`);
-      extraida.fragmentos = await render.ocrPagina(i - 1);
-      paginasConOcr++;
-      // Si hay texto reconocido, la imagen de página completa ya no es necesaria
-      if (extraida.fragmentos.length) extraida.imagenes = [];
-    }
-    paginas.push(extraida);
-  }
-
-  progreso(0.5, 'Analizando el texto…');
-  const analisis = analizarDocumento(paginas, { quitarCabeceras: opciones.quitarCabeceras, incluirImagenes: opciones.incluirImagenes });
-  const escaneado = analisis.caracteres < total * 20;
-  if (escaneado) {
-    advertencias.push(
-      opciones.ocr
+  const lectura = await leerDocumentoPdf({
+    doc, ops, render, ocr: opciones.ocr, incluirImagenes: opciones.incluirImagenes, quitarCabeceras: opciones.quitarCabeceras, progreso, cancelado: e.cancelado,
+    avisoEscaneado: (ocr) =>
+      ocr
         ? 'Casi no se encontró texto. Si es un documento escaneado, prueba el modo «diseño fijo» o revisa el idioma del OCR.'
         : 'Este PDF parece escaneado (no contiene texto). Activa el OCR para obtener texto, o usa el modo «diseño fijo».',
-    );
-  }
-  if (paginasConOcr > 0) advertencias.push(`Se aplicó OCR en ${paginasConOcr} página${paginasConOcr === 1 ? '' : 's'}: revisa el texto, puede contener errores.`);
+  });
+  const { paginas, analisis, escaneado } = lectura;
+  advertencias.push(...lectura.advertencias);
 
   const textoMuestra = analisis.bloques.filter((b): b is Extract<Bloque, { tipo: 'p' }> => b.tipo === 'p').slice(0, 200).map((b) => b.spans.map((s) => s.texto).join('')).join(' ');
   const idioma = opciones.idioma !== 'auto' ? opciones.idioma : (meta.idioma ?? detectarIdioma(textoMuestra) ?? 'es');

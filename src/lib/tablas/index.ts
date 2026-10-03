@@ -23,7 +23,7 @@ export interface ResumenTablas {
 
 /** Convierte las tablas (y opcionalmente el texto) de las páginas ya extraídas en un libro de Excel. */
 export async function paginasAXlsx(paginas: PaginaExtraida[], opciones: OpcionesTablas): Promise<{ datos: Uint8Array; resumen: ResumenTablas }> {
-  const porPagina: PaginaTablas[] = paginas.map(detectarTablas);
+  const porPagina: PaginaTablas[] = paginas.map((p) => detectarTablas(p));
   const tablas = unirTablasEntrePaginas(porPagina);
   const advertencias: string[] = [];
 

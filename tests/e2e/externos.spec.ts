@@ -6,8 +6,8 @@ import sharp from 'sharp';
 import { PDFDocument, PDFName, PDFArray } from 'pdf-lib';
 import { abrirApp, carpetaTemporal, irA, simularGuardado, subir } from './util';
 import { crearPdf, textosPorPagina } from '../util/pdfs';
-import { crearOffice, crearPdfDesdeOdf, hayGhostscript, NS_ODF } from '../util/office';
-import { hayLibreOffice } from '../util/libro';
+import { hayGhostscript } from '../util/office';
+import { crearDocumentoPdf, crearPresentacionPdf } from '../util/documento';
 
 const dir = carpetaTemporal();
 const escribir = (nombre: string, datos: Uint8Array | Buffer) => {
@@ -66,71 +66,83 @@ test.describe('Ghostscript', () => {
   });
 });
 
-test.describe('LibreOffice', () => {
-  test.skip(!hayLibreOffice, 'LibreOffice no está instalado');
-
-  test('Word a PDF', async () => {
+test.describe('PDF a Word, PowerPoint y Excel (motores propios)', () => {
+  test('PDF a Word y de vuelta a PDF con el motor propio', async () => {
     const { app, page } = await abrirApp();
-    const salida = path.join(dir, 'informe.pdf');
-    await simularGuardado(app, [salida]);
-    await irA(page, 'word-a-pdf');
-    await subir(page, escribir('informe.docx', crearOffice('docx')));
-    await page.getByTestId('accion').click();
-    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
-    expect((await textosPorPagina(leer(salida)))[0]).toContain('Informe trimestral de ventas');
-    await app.close();
-  });
-
-  test('Excel a PDF y PowerPoint a PDF', async () => {
-    const { app, page } = await abrirApp();
-    const s1 = path.join(dir, 'ventas.pdf');
-    await simularGuardado(app, [s1]);
-    await irA(page, 'excel-a-pdf');
-    await subir(page, escribir('ventas.xlsx', crearOffice('xlsx')));
-    await page.getByTestId('accion').click();
-    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
-    expect((await textosPorPagina(leer(s1)))[0]).toContain('Manzanas');
-
-    const s2 = path.join(dir, 'plan.pdf');
-    await simularGuardado(app, [s2]);
-    await irA(page, 'powerpoint-a-pdf');
-    await subir(page, escribir('plan.pptx', crearOffice('pptx')));
-    await page.getByTestId('accion').click();
-    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
-    expect(await textosPorPagina(leer(s2))).toHaveLength(2);
-    await app.close();
-  });
-
-  test('PDF a Word y PDF a PowerPoint', async () => {
-    const { app, page } = await abrirApp();
-    const pdfDoc = crearPdfDesdeOdf('informe.fodt', `<?xml version="1.0" encoding="UTF-8"?><office:document ${NS_ODF} office:mimetype="application/vnd.oasis.opendocument.text"><office:body><office:text><text:p>Documento de prueba para convertir a Word</text:p></office:text></office:body></office:document>`);
-    const o1 = path.join(dir, 'doc.docx');
-    await simularGuardado(app, [o1]);
+    const docx = path.join(dir, 'informe.docx');
+    await simularGuardado(app, [docx]);
     await irA(page, 'pdf-a-word');
-    await subir(page, escribir('doc.pdf', pdfDoc));
+    await expect(page.getByTestId('falta-binario')).toHaveCount(0);
+    await subir(page, escribir('informe.pdf', await crearDocumentoPdf()));
     await page.getByTestId('accion').click();
     await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
-    const zip = await JSZip.loadAsync(fs.readFileSync(o1));
-    expect((await zip.file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '')).toContain('Documento de prueba');
+    await expect(page.getByTestId('resumen-word')).toContainText('Tablas: 1');
+    const zip = await JSZip.loadAsync(fs.readFileSync(docx));
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).toContain('Heading1');
+    expect(xml).toContain('<w:tbl>');
+    expect(xml.replace(/<[^>]+>/g, ' ')).toContain('Informe de resultados');
+    await page.screenshot({ path: 'tests/capturas/pdf-a-word.png' });
 
-    const o2 = path.join(dir, 'doc.pptx');
-    await simularGuardado(app, [o2]);
-    await irA(page, 'pdf-a-powerpoint');
-    await subir(page, path.join(dir, 'doc.pdf'));
+    // El .docx generado se abre con la herramienta «Word a PDF» de la propia app
+    const pdf2 = path.join(dir, 'informe_2.pdf');
+    await simularGuardado(app, [pdf2]);
+    await irA(page, 'word-a-pdf');
+    await subir(page, docx);
     await page.getByTestId('accion').click();
     await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
-    const pz = await JSZip.loadAsync(fs.readFileSync(o2));
-    expect(Object.keys(pz.files).some((f) => /^ppt\/slides\/slide1\.xml$/.test(f))).toBe(true);
+    const t = (await textosPorPagina(leer(pdf2))).join(' ');
+    for (const s of ['Informe de resultados', 'texto importante', 'Manzanas', 'Preparar los datos']) expect(t).toContain(s);
+    await app.close();
+  });
+
+  test('PDF a PowerPoint (editable y solo imágenes) y de vuelta a PDF', async () => {
+    const { app, page } = await abrirApp();
+    const pptx = path.join(dir, 'plan.pptx');
+    await simularGuardado(app, [pptx]);
+    await irA(page, 'pdf-a-powerpoint');
+    await subir(page, escribir('plan.pdf', await crearPresentacionPdf()));
+    await page.getByTestId('accion').click();
+    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByTestId('resumen-pptx')).toContainText('Diapositivas: 2');
+    await expect(page.getByTestId('resumen-pptx')).toContainText('Cuadros de texto editables: 5');
+    const zip = await JSZip.loadAsync(fs.readFileSync(pptx));
+    expect(Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))).toHaveLength(2);
+    const s1 = await zip.file('ppt/slides/slide1.xml')!.async('string');
+    expect(s1).toContain('Plan de lanzamiento');
+    expect(s1).toContain('<p:bg>');
+    await page.screenshot({ path: 'tests/capturas/pdf-a-powerpoint.png' });
+
+    const pdf2 = path.join(dir, 'plan_2.pdf');
+    await simularGuardado(app, [pdf2]);
+    await irA(page, 'powerpoint-a-pdf');
+    await subir(page, pptx);
+    await page.getByTestId('accion').click();
+    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+    const textos = await textosPorPagina(leer(pdf2));
+    expect(textos).toHaveLength(2);
+    expect(textos[0]).toContain('Plan de lanzamiento');
+    expect(textos[1]).toContain('Aumentar las ventas');
+
+    // Solo imágenes: sin cuadros de texto
+    const pptx2 = path.join(dir, 'plan_imagenes.pptx');
+    await simularGuardado(app, [pptx2]);
+    await irA(page, 'pdf-a-powerpoint');
+    await subir(page, path.join(dir, 'plan.pdf'));
+    await page.getByRole('radio', { name: 'Solo imágenes' }).click();
+    await page.getByTestId('accion').click();
+    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+    const z2 = await JSZip.loadAsync(fs.readFileSync(pptx2));
+    expect(await z2.file('ppt/slides/slide1.xml')!.async('string')).not.toContain('<p:sp>');
     await app.close();
   });
 
   test('PDF a Excel extrae las tablas con el motor propio', async () => {
     const { app, page } = await abrirApp();
-    const fods = `<?xml version="1.0" encoding="UTF-8"?><office:document ${NS_ODF} office:mimetype="application/vnd.oasis.opendocument.spreadsheet"><office:body><office:spreadsheet><table:table table:name="V">${[['Producto', 'Unidades', 'Precio'], ['Manzanas', '120', '1,50'], ['Peras', '80', '2,25'], ['Uvas', '45', '3,10']].map((r) => `<table:table-row>${r.map((c) => `<table:table-cell office:value-type="string"><text:p>${c}</text:p></table:table-cell>`).join('')}</table:table-row>`).join('')}</table:table></office:spreadsheet></office:body></office:document>`;
     const salida = path.join(dir, 'tabla.xlsx');
     await simularGuardado(app, [salida]);
     await irA(page, 'pdf-a-excel');
-    await subir(page, escribir('tabla.pdf', crearPdfDesdeOdf('tabla.fods', fods)));
+    await subir(page, escribir('tabla.pdf', await crearDocumentoPdf({ conImagen: false })));
     await page.getByTestId('accion').click();
     await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('notas')).toContainText('1 tabla');

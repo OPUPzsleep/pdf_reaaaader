@@ -23,11 +23,22 @@ export interface InfoFuente {
   negrita: boolean;
   cursiva: boolean;
   mono: boolean;
+  familia?: string;
+}
+
+/** «ABCDEF+TimesNewRomanPS-BoldMT» → «Times New Roman» */
+export function familiaDeFuente(nombre: string | undefined): string | undefined {
+  if (!nombre) return undefined;
+  let n = nombre.replace(/^[A-Z]{6}\+/, '').split(/[-,]/)[0];
+  n = n.replace(/(PSMT|MT|PS|Std|Pro|LT)$/i, '').replace(/(Bold|Italic|Oblique|Regular|Roman|Semibold|Black|Light)+$/i, '');
+  if (!n) return undefined;
+  if (!/\s/.test(n)) n = n.replace(/([a-z])([A-Z])/g, '$1 $2');
+  return n.trim() || undefined;
 }
 
 export function estiloDeFuente(nombre: string | undefined, esMono = false): InfoFuente {
   const n = nombre ?? '';
-  return { negrita: NEGRITA.test(n), cursiva: CURSIVA.test(n), mono: esMono || MONO.test(n) };
+  return { negrita: NEGRITA.test(n), cursiva: CURSIVA.test(n), mono: esMono || MONO.test(n), familia: familiaDeFuente(nombre) };
 }
 
 /** Códigos de operación de pdf.js (pasados por el llamador para no depender de qué build se importa). */
@@ -95,6 +106,7 @@ export async function extraerPagina(
       negrita: est.negrita,
       cursiva: est.cursiva || inclinado,
       mono: est.mono,
+      fuente: est.familia,
     });
   }
 

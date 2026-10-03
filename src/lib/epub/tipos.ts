@@ -11,6 +11,8 @@ export interface Fragmento {
   negrita: boolean;
   cursiva: boolean;
   mono: boolean;
+  /** Familia de la fuente del PDF, limpia («Calibri», «Times New Roman»), si se conoce */
+  fuente?: string;
 }
 
 export interface RecuadroImagen {
@@ -33,6 +35,8 @@ export interface PaginaExtraida {
   origenY: number;
   fragmentos: Fragmento[];
   imagenes: RecuadroImagen[];
+  /** El texto de la página salió del OCR (no estaba en el PDF) */
+  ocr?: boolean;
 }
 
 export interface Span {
@@ -120,6 +124,10 @@ export interface ProveedorRender {
   regionAImagen(indice: number, r: { x: number; y: number; ancho: number; alto: number }, anchoPx: number): Promise<{ datos: Uint8Array; tipo: 'jpeg' | 'png' }>;
   /** Reconoce el texto de una página mediante OCR y devuelve líneas con su recuadro (coordenadas visuales) */
   ocrPagina?(indice: number): Promise<Fragmento[]>;
+  /** Como `paginaAJpeg` pero sin dibujar el texto: el fondo sobre el que se colocan los cuadros de texto editables */
+  paginaSinTextoAJpeg?(indice: number, anchoPx: number): Promise<{ datos: Uint8Array; ancho: number; alto: number }>;
+  /** Píxeles RGBA de la página (con o sin texto) para averiguar de qué color es cada texto */
+  paginaRgba?(indice: number, anchoPx: number, sinTexto: boolean): Promise<{ ancho: number; alto: number; datos: Uint8ClampedArray }>;
   /** Libera recursos (el trabajador de OCR) al terminar */
   liberar?(): Promise<void>;
 }

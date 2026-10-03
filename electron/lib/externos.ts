@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { DestinoOffice, EstadoBinario, PerfilCompresion } from '../../src/types/api';
+import type { EstadoBinario, PerfilCompresion } from '../../src/types/api';
 
 const esWindows = process.platform === 'win32';
 
@@ -64,22 +64,6 @@ export function localizarGhostscript({ recursos }: RutasExternas): string | null
   return enPath(esWindows ? ['gswin64c.exe', 'gswin32c.exe'] : ['gs']);
 }
 
-export function localizarLibreOffice({ recursos }: RutasExternas): string | null {
-  const env = process.env.PDFREAAAADER_SOFFICE;
-  if (env && fs.existsSync(env)) return env;
-  const nombres = esWindows ? ['soffice.exe'] : ['soffice'];
-  const propio = buscarArchivo(path.join(recursos, 'libreoffice'), nombres, 5);
-  if (propio) return propio;
-  if (esWindows) {
-    for (const base of [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']]) {
-      if (!base) continue;
-      const r = path.join(base, 'LibreOffice', 'program', 'soffice.exe');
-      if (fs.existsSync(r)) return r;
-    }
-  }
-  return enPath(nombres);
-}
-
 export function localizarRealEsrgan({ recursos }: RutasExternas): string | null {
   return buscarArchivo(path.join(recursos, 'realesrgan'), esWindows ? ['realesrgan-ncnn-vulkan.exe'] : ['realesrgan-ncnn-vulkan'], 3) ?? enPath(esWindows ? ['realesrgan-ncnn-vulkan.exe'] : ['realesrgan-ncnn-vulkan']);
 }
@@ -97,7 +81,6 @@ export function estadoBinarios(r: RutasExternas): EstadoBinario[] {
     id, nombre, disponible: !!ruta, ruta: ruta ?? undefined, detalle: ruta ? undefined : detalle,
   });
   return [
-    f('libreoffice', 'LibreOffice', localizarLibreOffice(r), 'Instálalo o ejecuta «npm run fetch-binaries» para incluirlo en la app.'),
     f('ghostscript', 'Ghostscript', localizarGhostscript(r), 'Instálalo o ejecuta «npm run fetch-binaries» para incluirlo en la app.'),
     f('realesrgan', 'Real-ESRGAN', localizarRealEsrgan(r), 'Ejecuta «npm run fetch-binaries» para descargarlo.'),
     f('modelo-fondo', 'Modelo para quitar fondos', localizarModeloFondo(r), 'Ejecuta «npm run fetch-binaries» para descargarlo.'),
@@ -142,7 +125,7 @@ export function ejecutar(
       env: { ...process.env, ...opciones.env },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      detached: !esWindows, // grupo propio para poder matar a los hijos (soffice.bin)
+      detached: !esWindows, // grupo propio para poder matar a los procesos hijos
     });
     let salida = '';
     let error = '';
@@ -182,17 +165,6 @@ const aBuffer = (d: Uint8Array) => Buffer.from(d.buffer, d.byteOffset, d.byteLen
 /** Comprueba por los primeros bytes que el archivo es lo que dice ser. */
 export function esPdf(d: Uint8Array): boolean {
   return Buffer.from(d.subarray(0, 1024)).includes('%PDF-');
-}
-
-export function pareceOffice(d: Uint8Array, extension: string): boolean {
-  const ext = extension.replace(/^\./, '').toLowerCase();
-  const cab = Buffer.from(d.subarray(0, 8));
-  const zip = cab[0] === 0x50 && cab[1] === 0x4b;
-  const ole = cab[0] === 0xd0 && cab[1] === 0xcf && cab[2] === 0x11 && cab[3] === 0xe0;
-  if (['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'].includes(ext)) return zip;
-  if (['doc', 'xls', 'ppt'].includes(ext)) return ole || zip;
-  if (ext === 'rtf') return cab.toString('latin1').startsWith('{\\rtf');
-  return true;
 }
 
 /* ───────────────────────── Ghostscript ───────────────────────── */
@@ -273,73 +245,4 @@ export async function pdfAPdfA(r: RutasExternas, datos: Uint8Array, titulo = 'Do
     if (res.codigo !== 0 || !fs.existsSync(salida)) throw new Error(`Ghostscript no pudo convertir a PDF/A. ${res.error.trim().split('\n').pop() ?? ''}`.trim());
     return new Uint8Array(await fsp.readFile(salida));
   });
-}
-
-/* ───────────────────────── LibreOffice ───────────────────────── */
-
-// LibreOffice no admite dos conversiones a la vez con el mismo perfil: se encolan.
-let colaOffice: Promise<unknown> = Promise.resolve();
-
-function enCola<T>(fn: () => Promise<T>): Promise<T> {
-  const r = colaOffice.then(fn, fn);
-  colaOffice = r.catch(() => undefined);
-  return r;
-}
-
-/** URL file:// del perfil de LibreOffice; los espacios y acentos de la ruta (p. ej. el nombre de usuario) van codificados. */
-export const urlDePerfil = (dir: string, windows = esWindows) => 'file://' + (windows ? '/' : '') + encodeURI(dir.replace(/\\/g, '/'));
-
-const FILTROS_SALIDA: Record<'docx' | 'pptx', { ext: string; filtro: string; entrada: string }> = {
-  docx: { ext: 'docx', filtro: 'docx:MS Word 2007 XML', entrada: 'writer_pdf_import' },
-  pptx: { ext: 'pptx', filtro: 'pptx:Impress MS PowerPoint 2007 XML', entrada: 'impress_pdf_import' },
-};
-
-async function convertirConLibreOffice(
-  r: RutasExternas,
-  perfilDir: string,
-  datos: Uint8Array,
-  extensionEntrada: string,
-  filtroSalida: string,
-  extensionSalida: string,
-  filtroEntrada?: string,
-): Promise<Uint8Array> {
-  const soffice = localizarLibreOffice(r);
-  if (!soffice) throw new BinarioNoDisponible('LibreOffice');
-  if (extensionEntrada === 'pdf' ? !esPdf(datos) : !pareceOffice(datos, extensionEntrada)) {
-    throw new Error(extensionEntrada === 'pdf' ? 'El archivo no es un PDF válido.' : 'El archivo no parece un documento de Office válido (está dañado o su extensión no coincide).');
-  }
-  return enCola(() =>
-    conTemporal(async (dir) => {
-      const entrada = path.join(dir, `documento.${extensionEntrada}`);
-      await fsp.writeFile(entrada, aBuffer(datos));
-      const salidaDir = path.join(dir, 'salida');
-      await fsp.mkdir(salidaDir);
-      await fsp.mkdir(perfilDir, { recursive: true });
-      const args = [
-        '--headless', '--norestore', '--nolockcheck', '--nodefault', '--nologo', '--nofirststartwizard',
-        `-env:UserInstallation=${urlDePerfil(perfilDir)}`,
-        ...(filtroEntrada ? [`--infilter=${filtroEntrada}`] : []),
-        '--convert-to', filtroSalida,
-        '--outdir', salidaDir,
-        entrada,
-      ];
-      const res = await ejecutar(soffice, args, { timeoutMs: 600_000 });
-      const salida = path.join(salidaDir, `documento.${extensionSalida}`);
-      if (!fs.existsSync(salida)) {
-        const detalle = (res.error + res.salida).trim().split('\n').filter(Boolean).pop() ?? '';
-        throw new Error(`LibreOffice no pudo convertir el archivo (¿está dañado o protegido con contraseña?). ${detalle}`.trim());
-      }
-      return new Uint8Array(await fsp.readFile(salida));
-    }),
-  );
-}
-
-export function officeAPdf(r: RutasExternas, perfilDir: string, datos: Uint8Array, extension: string): Promise<Uint8Array> {
-  return convertirConLibreOffice(r, perfilDir, datos, extension.replace(/^\./, '').toLowerCase(), 'pdf:writer_pdf_Export', 'pdf');
-}
-
-export function pdfAOffice(r: RutasExternas, perfilDir: string, datos: Uint8Array, destino: DestinoOffice): Promise<Uint8Array> {
-  if (destino === 'xlsx') return Promise.reject(new Error('PDF a Excel se hace con la extracción de tablas propia, no con LibreOffice.'));
-  const f = FILTROS_SALIDA[destino];
-  return convertirConLibreOffice(r, perfilDir, datos, 'pdf', f.filtro, f.ext, f.entrada);
 }

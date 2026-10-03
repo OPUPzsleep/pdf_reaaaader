@@ -2,28 +2,18 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import JSZip from 'jszip';
 import sharp from 'sharp';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream, decodePDFRawStream } from 'pdf-lib';
-import { comprimirPdf, estadoBinarios, urlDePerfil, localizarGhostscript, localizarLibreOffice, officeAPdf, pdfAOffice, pdfAPdfA, type RutasExternas } from '../electron/lib/externos';
-import { crearOffice, hayGhostscript } from './util/office';
-import { hayLibreOffice } from './util/libro';
+import { comprimirPdf, estadoBinarios, localizarGhostscript, pdfAPdfA, type RutasExternas } from '../electron/lib/externos';
+import { hayGhostscript } from './util/office';
 import { crearPdf, textosPorPagina } from './util/pdfs';
 
 const rutas: RutasExternas = { recursos: path.join(os.tmpdir(), 'no-existe-recursos') };
-const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'perfil-lo-'));
-
-describe('perfil de LibreOffice', () => {
-  it('codifica espacios y acentos en la URL', () => {
-    expect(urlDePerfil('C:\\Users\\José Pérez\\AppData\\Roaming\\pdfreaaaader\\perfil', true)).toBe('file:///C:/Users/Jos%C3%A9%20P%C3%A9rez/AppData/Roaming/pdfreaaaader/perfil');
-    expect(urlDePerfil('/tmp/mi perfil', false)).toBe('file:///tmp/mi%20perfil');
-  });
-});
 
 describe('localización de binarios', () => {
   it('informa de lo que hay en el sistema', () => {
     const estado = estadoBinarios(rutas);
-    expect(estado.map((e) => e.id)).toEqual(['libreoffice', 'ghostscript', 'realesrgan', 'modelo-fondo']);
+    expect(estado.map((e) => e.id)).toEqual(['ghostscript', 'realesrgan', 'modelo-fondo']);
     // Sin carpeta de recursos solo se encuentra lo que haya instalado en el sistema (PATH o Program Files)
     for (const e of estado) expect(e.disponible ? e.ruta : e.detalle).toBeTruthy();
     expect(estado.find((e) => e.id === 'modelo-fondo')?.detalle).toMatch(/fetch-binaries/);
@@ -31,13 +21,9 @@ describe('localización de binarios', () => {
   it('prefiere los binarios incluidos en la carpeta de recursos', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'recursos-'));
     fs.mkdirSync(path.join(dir, 'ghostscript', 'bin'), { recursive: true });
-    fs.mkdirSync(path.join(dir, 'libreoffice', 'LibreOffice', 'program'), { recursive: true });
     const gs = path.join(dir, 'ghostscript', 'bin', process.platform === 'win32' ? 'gswin64c.exe' : 'gs');
-    const so = path.join(dir, 'libreoffice', 'LibreOffice', 'program', process.platform === 'win32' ? 'soffice.exe' : 'soffice');
     fs.writeFileSync(gs, '');
-    fs.writeFileSync(so, '');
     expect(localizarGhostscript({ recursos: dir })).toBe(gs);
-    expect(localizarLibreOffice({ recursos: dir })).toBe(so);
   });
 });
 
@@ -91,64 +77,4 @@ describe.skipIf(!hayGhostscript)('Ghostscript', () => {
     expect(xmp).toMatch(/pdfaid:conformance=.B./);
     expect(catalogo.lookup(PDFName.of('OutputIntents'), PDFArray).lookup(0, PDFDict).get(PDFName.of('S'))?.toString()).toBe('/GTS_PDFA1');
   }, 120_000);
-});
-
-describe.skipIf(!hayLibreOffice)('LibreOffice', () => {
-  it('Word a PDF', async () => {
-    const pdf = await officeAPdf(rutas, perfil, crearOffice('docx'), 'docx');
-    expect((await textosPorPagina(pdf))[0]).toContain('Informe trimestral de ventas');
-  }, 240_000);
-
-  it('RTF a PDF', async () => {
-    const rtf = Buffer.from('{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Arial;}}\\f0\\fs28 Hola desde LibreOffice.\\par Segunda linea.\\par}');
-    const pdf = await officeAPdf(rutas, perfil, new Uint8Array(rtf), 'rtf');
-    expect((await textosPorPagina(pdf))[0]).toContain('Hola desde LibreOffice');
-  }, 240_000);
-
-  it('Excel a PDF', async () => {
-    const pdf = await officeAPdf(rutas, perfil, crearOffice('xlsx'), '.xlsx');
-    const t = (await textosPorPagina(pdf))[0];
-    expect(t).toContain('Producto');
-    expect(t).toContain('Manzanas');
-  }, 240_000);
-
-  it('PowerPoint a PDF: una página por diapositiva', async () => {
-    const pdf = await officeAPdf(rutas, perfil, crearOffice('pptx'), 'pptx');
-    const t = await textosPorPagina(pdf);
-    expect(t).toHaveLength(2);
-    expect(t[0]).toContain('Plan de lanzamiento');
-    expect(t[1]).toContain('Resultados esperados');
-  }, 240_000);
-
-  it('dos conversiones simultáneas no se pisan (cola)', async () => {
-    const [a, b] = await Promise.all([officeAPdf(rutas, perfil, crearOffice('docx'), 'docx'), officeAPdf(rutas, perfil, crearOffice('xlsx'), 'xlsx')]);
-    expect((await textosPorPagina(a))[0]).toContain('Informe');
-    expect((await textosPorPagina(b))[0]).toContain('Producto');
-  }, 300_000);
-
-  it('un archivo dañado da un error en español', async () => {
-    await expect(officeAPdf(rutas, perfil, new Uint8Array([1, 2, 3, 4, 5]), 'docx')).rejects.toThrow(/no parece un documento de Office válido/);
-    await expect(pdfAOffice(rutas, perfil, new Uint8Array([1, 2, 3, 4, 5]), 'docx')).rejects.toThrow(/no es un PDF válido/);
-  }, 240_000);
-
-  it('PDF a Excel no pasa por LibreOffice', async () => {
-    await expect(pdfAOffice(rutas, perfil, await crearPdf(1), 'xlsx')).rejects.toThrow(/extracción de tablas/);
-  });
-
-  it('PDF a Word conserva el texto', async () => {
-    const pdf = await officeAPdf(rutas, perfil, crearOffice('docx'), 'docx');
-    const docx = await pdfAOffice(rutas, perfil, pdf, 'docx');
-    const zip = await JSZip.loadAsync(docx);
-    const xml = await zip.file('word/document.xml')!.async('string');
-    expect(xml.replace(/<[^>]+>/g, '')).toContain('Informe trimestral');
-  }, 300_000);
-
-  it('PDF a PowerPoint genera diapositivas', async () => {
-    const pdf = await officeAPdf(rutas, perfil, crearOffice('pptx'), 'pptx');
-    const pptx = await pdfAOffice(rutas, perfil, pdf, 'pptx');
-    const zip = await JSZip.loadAsync(pptx);
-    const diapositivas = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f));
-    expect(diapositivas.length).toBe(2);
-  }, 300_000);
-
 });

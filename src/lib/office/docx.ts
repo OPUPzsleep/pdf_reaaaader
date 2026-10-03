@@ -1,4 +1,5 @@
 // Word (.docx) → HTML autocontenido con las reglas de página en CSS (@page). El HTML se imprime a PDF con Chromium.
+import { graficoASvg } from './grafico';
 import {
   Paquete, escaparHtml, familiaCss, imagenComoDatos, leerTema, limpiarControl, r2, resolverFuente, type Relacion, type Tema,
 } from './comun';
@@ -21,6 +22,7 @@ interface Ctx {
   num: Numeracion;
   rels: Map<string, Relacion>;
   imagenes: Map<string, string>;
+  graficos: Map<string, Nodo>;
   contadores: Map<number, number[]>;
   avisos: Set<string>;
   notasPie: Map<string, Nodo>;
@@ -187,7 +189,14 @@ function renderDibujo(d: Nodo, c: Ctx, st: Estado): string {
       .join('');
   }
   if (descendiente(marco, 'chart')) {
-    c.avisos.add('Los gráficos de Word no se pueden dibujar y se sustituyen por un recuadro.');
+    const idGrafico = descendiente(marco, 'chart')?.a.id;
+    const raiz = idGrafico ? c.graficos.get(c.rels.get(idGrafico)?.destino ?? '') : undefined;
+    if (raiz) {
+      const g = graficoASvg(raiz, w, h, c.tema);
+      if (g.aviso) c.avisos.add(`Gráficos de Word: ${g.aviso}.`);
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r2(w)} ${r2(h)}" style="display:inline-block;width:${r2(w)}pt;max-width:100%;height:auto;aspect-ratio:${r2(w)}/${r2(h)};vertical-align:bottom;${extra}">${g.svg}</svg>`;
+    }
+    c.avisos.add('No se pudo leer un gráfico de Word y se sustituye por un recuadro.');
     return `<div style="display:inline-block;box-sizing:border-box;width:${r2(w)}pt;max-width:100%;height:${r2(h)}pt;border:1px solid #bbb;background:#f6f6f6;color:#777;font:10pt sans-serif;text-align:center;line-height:${r2(h)}pt;vertical-align:bottom">[Gráfico]</div>`;
   }
   if (descendiente(marco, 'wsp') || descendiente(marco, 'sp')) {
@@ -270,6 +279,14 @@ function procesarRuns(nodos: Nodo[], c: Ctx, base: RPr, st: Estado, f: Fragmento
       case 'AlternateContent':
         procesarRuns((hijo(n, 'Choice') ?? hijo(n, 'Fallback'))?.h ?? [], c, base, st, f, enlace);
         break;
+      case 'oMath':
+      case 'oMathPara': {
+        // Ecuaciones: no se maquetan, pero su texto no se pierde (variables en cursiva, como en Word)
+        const t = descendientes(n, 't').map((x) => x.t).join('');
+        if (t.trim()) f.piezas.push({ t: 'txt', css: cssDeRPr({ ...base, i: true }, base, c), html: escaparHtml(limpiarControl(t)) });
+        c.avisos.add('Las ecuaciones de Word se muestran como texto plano.');
+        break;
+      }
       default:
         break;
     }
@@ -991,6 +1008,12 @@ export async function docxAHtml(datos: Uint8Array): Promise<ResultadoOffice> {
     const d = await imagenComoDatos(paquete, rel.destino);
     if (d) imagenes.set(rel.destino, d.uri);
   }
+  const graficos = new Map<string, Nodo>();
+  for (const rel of rels.values()) {
+    if (rel.externo || !rel.tipo.endsWith('/chart')) continue;
+    const raiz = await paquete.xml(rel.destino);
+    if (raiz) graficos.set(rel.destino, raiz);
+  }
   const notasPie = new Map<string, Nodo>();
   for (const [archivo, tipo, nombre] of [['word/footnotes.xml', 'f', 'footnote'], ['word/endnotes.xml', 'e', 'endnote']] as const) {
     const x = await paquete.xml(archivo);
@@ -1001,7 +1024,7 @@ export async function docxAHtml(datos: Uint8Array): Promise<ResultadoOffice> {
   }
 
   const ctx: Ctx = {
-    tema, estilos, num: numeracion, rels, imagenes, contadores: new Map(), avisos: new Set(), notasPie, notasUsadas: [], campos: [],
+    tema, estilos, num: numeracion, rels, imagenes, graficos, contadores: new Map(), avisos: new Set(), notasPie, notasUsadas: [], campos: [],
     anchoTexto: 450, izquierdaPagina: 72, superiorPagina: 72,
   };
 

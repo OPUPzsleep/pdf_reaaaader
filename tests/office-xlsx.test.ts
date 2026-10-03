@@ -15,7 +15,7 @@ describe('Excel → HTML: libro real (openpyxl)', () => {
   it('formatos de número, fechas, combinaciones, estilos y hojas', async () => {
     const { html, unidades, avisos } = await xlsxAHtml(fixture('libro.xlsx'));
     const t = texto(html);
-    expect(unidades).toBe(3);
+    expect(unidades).toBe(4);
     expect(avisos).toEqual([]);
     expect(t).toContain('Informe de ventas 2024');
     expect(html).toMatch(/<td class="x\d+" colspan="5"/); // A1:E1 combinada
@@ -40,8 +40,8 @@ describe('Excel → HTML: libro real (openpyxl)', () => {
 
   it('una página por hoja y las hojas muy anchas se reparten en bandas de columnas', async () => {
     const { html } = await xlsxAHtml(fixture('libro.xlsx'));
-    expect(html.match(/<section style="page:h\d+"/g)).toHaveLength(3);
-    const ancha = html.split('<section style="page:h3"')[1];
+    expect(html.match(/<section style="page:h\d+"/g)).toHaveLength(4);
+    const ancha = html.split('<section style="page:h3"')[1].split('<section style="page:h4"')[0];
     const bandas = (ancha.match(/<table/g) ?? []).length;
     expect(bandas).toBeGreaterThanOrEqual(2); // 24 columnas no caben a un tamaño legible → varias bandas
     expect(bandas).toBeLessThanOrEqual(3);

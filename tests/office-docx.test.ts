@@ -196,6 +196,13 @@ describe('Word → HTML: casos concretos', () => {
     expect(html).toContain('<br>');
   });
 
+  it('las ecuaciones no se pierden: su texto aparece con un aviso', async () => {
+    const d = await crearDocx({ cuerpo: P(R('Sea ') + '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x</m:t></m:r><m:r><m:t>=</m:t></m:r><m:r><m:t>2π</m:t></m:r></m:oMath>' + R(' radianes')) });
+    const { html, avisos } = await docxAHtml(d);
+    expect(texto(html)).toContain('Sea x=2π radianes');
+    expect(avisos.join(' ')).toMatch(/ecuaciones/);
+  });
+
   it('un archivo que no es docx da un error claro', async () => {
     await expect(docxAHtml(new Uint8Array([1, 2, 3, 4]))).rejects.toThrow(/no parece un documento de Office/);
     const d = await crearDocx({ cuerpo: '' });

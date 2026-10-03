@@ -17,10 +17,10 @@ describe('PowerPoint → HTML: presentación real (python-pptx)', () => {
   it('diapositivas, tamaño de página, texto, listas, formas, imagen y tabla', async () => {
     const { html, unidades, avisos } = await pptxAHtml(fixture('presentacion.pptx'));
     const t = texto(html);
-    expect(unidades).toBe(5);
+    expect(unidades).toBe(6);
     expect(avisos).toEqual([]);
     expect(html).toMatch(/@page\{size:959\.98pt 540pt;margin:0\}/); // 13,333 pulgadas
-    expect((html.match(/<section class="d"/g) ?? []).length).toBe(5);
+    expect((html.match(/<section class="d"/g) ?? []).length).toBe(6);
     for (const s of ['Plan de lanzamiento', 'Producto nuevo', 'Objetivos', 'Reforzar la marca', 'Campaña en redes sociales', '¡Gracias!']) expect(t).toContain(s);
     // viñetas
     expect(html).toContain('>•</span>');
@@ -107,7 +107,7 @@ describe('PowerPoint → HTML: casos concretos', () => {
     const grafico = '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="2" name="g"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/></a:graphicData></a:graphic></p:graphicFrame>';
     const { html, avisos } = await pptxAHtml(await crearPptxMinimo([grafico]));
     expect(html).toContain('[Gráfico]');
-    expect(avisos.join(' ')).toMatch(/gráficos/);
+    expect(avisos.join(' ')).toMatch(/gráfico/);
   });
 
   it('un archivo que no es pptx da un error claro', async () => {

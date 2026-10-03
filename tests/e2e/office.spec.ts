@@ -71,7 +71,7 @@ test('PowerPoint a PDF: una página por diapositiva con el tamaño de la present
   await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 60_000 });
   const pdf = leer(salida);
   const textos = await textosPorPagina(pdf);
-  expect(textos).toHaveLength(5);
+  expect(textos).toHaveLength(6);
   expect(textos[0]).toContain('Plan de lanzamiento');
   expect(textos[1]).toContain('Reforzar la marca');
   expect(textos[4]).toContain('¡Gracias!');

@@ -8,6 +8,9 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, Cm, RGBColor, Inches
 from openpyxl import Workbook
+from openpyxl.chart import BarChart, LineChart, PieChart, Reference, ScatterChart, Series
+from pptx.chart.data import CategoryChartData, XyChartData
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from pptx import Presentation
 from pptx.dml.color import RGBColor as PRGB
@@ -138,6 +141,20 @@ ws3.append([f'Columna {i}' for i in range(1, 25)])
 ws3.append([i * 100.5 for i in range(1, 25)])
 for i in range(1, 25): ws3.column_dimensions[chr(64 + i) if i <= 26 else 'A'].width = 11
 ws3.page_setup.orientation = 'landscape'
+wsg = wb.create_sheet('Gráficos')
+wsg.append(['Mes', 'Ventas', 'Gastos'])
+for fila in (('Ene', 120, 80), ('Feb', 150, 95), ('Mar', 90, 110), ('Abr', 180, 100), ('May', 210, 130)):
+    wsg.append(list(fila))
+col = BarChart(); col.type = 'col'; col.title = 'Ventas y gastos'; col.y_axis.title = 'Euros'
+col.add_data(Reference(wsg, min_col=2, max_col=3, min_row=1, max_row=6), titles_from_data=True); col.set_categories(Reference(wsg, min_col=1, min_row=2, max_row=6))
+col.width, col.height = 14, 7.5
+wsg.add_chart(col, 'E2')
+lin = LineChart(); lin.title = 'Tendencia'; lin.add_data(Reference(wsg, min_col=2, max_col=3, min_row=1, max_row=6), titles_from_data=True); lin.set_categories(Reference(wsg, min_col=1, min_row=2, max_row=6))
+lin.width, lin.height = 14, 7.5
+wsg.add_chart(lin, 'E18')
+pie = PieChart(); pie.title = 'Reparto'; pie.add_data(Reference(wsg, min_col=2, min_row=1, max_row=6), titles_from_data=True); pie.set_categories(Reference(wsg, min_col=1, min_row=2, max_row=6))
+pie.width, pie.height = 6.4, 6
+wsg.add_chart(pie, 'A9')
 wb.save(os.path.join(SALIDA, 'libro.xlsx'))
 
 # ───────────── PowerPoint ─────────────
@@ -161,5 +178,12 @@ tbl = pic.shapes.add_table(3, 3, PI(6), PI(1.8), PI(6.5), PI(2)).table
 for r_i, fila in enumerate((('Región', 'Ventas', 'Cuota'), ('Norte', '1.250', '35 %'), ('Sur', '980', '27 %'))):
     for c_i, txt in enumerate(fila): tbl.cell(r_i, c_i).text = txt
 fin = prs.slides.add_slide(prs.slide_layouts[6]); tb = fin.shapes.add_textbox(PI(3), PI(3), PI(7), PI(1.5)); tb.text_frame.text = '¡Gracias!'; tb.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER; tb.text_frame.paragraphs[0].runs[0].font.size = PPt(54)
+gs = prs.slides.add_slide(prs.slide_layouts[5]); gs.shapes.title.text = 'Gráficos'
+cd = CategoryChartData(); cd.categories = ['Norte', 'Sur', 'Este', 'Oeste']; cd.add_series('2023', (19.2, 21.4, 16.7, 12.9)); cd.add_series('2024', (22.3, 18.2, 21.1, 15.6))
+g1 = gs.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, PI(0.6), PI(1.6), PI(6), PI(4.6), cd).chart
+g1.has_legend = True; g1.legend.position = XL_LEGEND_POSITION.BOTTOM; g1.legend.include_in_layout = False; g1.has_title = True; g1.chart_title.text_frame.text = 'Ventas por zona'
+cd2 = CategoryChartData(); cd2.categories = ['A', 'B', 'C']; cd2.add_series('Cuota', (55, 30, 15))
+g2 = gs.shapes.add_chart(XL_CHART_TYPE.PIE, PI(7), PI(1.6), PI(5.6), PI(4.6), cd2).chart
+g2.has_legend = True; g2.legend.position = XL_LEGEND_POSITION.RIGHT; g2.plots[0].has_data_labels = True; g2.plots[0].data_labels.show_percentage = True; g2.plots[0].data_labels.number_format = '0%'; g2.plots[0].data_labels.number_format_is_linked = False
 prs.save(os.path.join(SALIDA, 'presentacion.pptx'))
 print('listo')

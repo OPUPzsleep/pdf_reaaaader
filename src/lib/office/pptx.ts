@@ -3,6 +3,7 @@ import {
   Paquete, colorDrawingMl, escaparHtml, familiaCss, imagenComoDatos, leerTema, limpiarControl, r2, resolverFuente, type Relacion, type Tema,
 } from './comun';
 import type { ResultadoOffice } from './docx';
+import { graficoASvg } from './grafico';
 import { geometriaPersonalizada, geometriaPredefinida, leerAjustes, type GeometriaSvg } from './pptxGeom';
 import { descendiente, hijo, hijos, num, ruta, type Nodo } from './xml';
 
@@ -150,6 +151,7 @@ interface Diseno {
 interface Global {
   paquete: Paquete;
   imagenes: Map<string, string>;
+  graficos: Map<string, Nodo>;
   avisos: Set<string>;
   estiloTablas: Map<string, Nodo>;
   defecto: Niveles;
@@ -813,9 +815,17 @@ function renderArbol(arbol: Nodo | undefined, c: CtxParte, T: Transformada, esPl
         const xf = leerXfrm(hijo(n, 'xfrm'));
         if (xf) {
           const b = aplicar(T, xf);
-          const grafico = !!descendiente(n, 'chart');
-          c.g.avisos.add(grafico ? 'Los gráficos de PowerPoint no se pueden dibujar y se sustituyen por un recuadro.' : 'Algún objeto incrustado (SmartArt, vídeo…) no se pudo dibujar.');
-          salida.push(`<div style="${cajaCss(b)}border:1px solid #bbb;background:#f6f6f6;display:flex;align-items:center;justify-content:center;color:#777;font:12pt sans-serif;box-sizing:border-box">${grafico ? '[Gráfico]' : '[Objeto]'}</div>`);
+          const idGrafico = descendiente(n, 'chart')?.a.id;
+          const raizGrafico = idGrafico ? c.g.graficos.get(c.rels.get(idGrafico)?.destino ?? '') : undefined;
+          if (raizGrafico) {
+            const g = graficoASvg(raizGrafico, pt(b.w), pt(b.h), c.paleta.tema, undefined, { tamBase: 18 });
+            if (g.aviso) c.g.avisos.add(`Gráficos de PowerPoint: ${g.aviso}.`);
+            salida.push(`<div style="${cajaCss(b)}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r2(pt(b.w))} ${r2(pt(b.h))}" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%">${g.svg}</svg></div>`);
+          } else {
+            const grafico = !!idGrafico;
+            c.g.avisos.add(grafico ? 'No se pudo leer un gráfico de PowerPoint y se sustituye por un recuadro.' : 'Algún objeto incrustado (SmartArt, vídeo…) no se pudo dibujar.');
+            salida.push(`<div style="${cajaCss(b)}border:1px solid #bbb;background:#f6f6f6;display:flex;align-items:center;justify-content:center;color:#777;font:12pt sans-serif;box-sizing:border-box">${grafico ? '[Gráfico]' : '[Objeto]'}</div>`);
+          }
         }
       }
     } else if (n.n === 'grpSp') {
@@ -866,7 +876,7 @@ export async function pptxAHtml(datos: Uint8Array): Promise<ResultadoOffice> {
   const ancho = num(tamano, 'cx', 12192000);
   const alto = num(tamano, 'cy', 6858000);
 
-  const g: Global = { paquete, imagenes: new Map(), avisos: new Set(), estiloTablas: new Map(), defecto: [], ancho, alto, idCounter: 0 };
+  const g: Global = { paquete, imagenes: new Map(), graficos: new Map(), avisos: new Set(), estiloTablas: new Map(), defecto: [], ancho, alto, idCounter: 0 };
   const tablasXml = await paquete.xml('ppt/tableStyles.xml');
   for (const s of hijos(tablasXml, 'tblStyle')) if (s.a.styleId) g.estiloTablas.set(s.a.styleId, s);
 
@@ -934,6 +944,11 @@ export async function pptxAHtml(datos: Uint8Array): Promise<ResultadoOffice> {
     const relMaestro = [...relsDiseno.values()].find((r) => r.tipo.endsWith('/slideMaster'));
     const maestro = relMaestro ? await cargarMaestro(relMaestro.destino) : maestro0;
     if (!maestro) continue;
+    for (const r of rels.values()) {
+      if (r.externo || !r.tipo.endsWith('/chart') || g.graficos.has(r.destino)) continue;
+      const raiz = await paquete.xml(r.destino);
+      if (raiz) g.graficos.set(r.destino, raiz);
+    }
     await cargarImagenes(rels);
     await cargarImagenes(relsDiseno);
     await cargarImagenes(maestro.rels);

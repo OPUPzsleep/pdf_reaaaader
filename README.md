@@ -62,14 +62,16 @@ Sin LibreOffice ni Office: cada documento se lee por código (`src/lib/office/`)
 | Formato | Qué se conserva |
 |---|---|
 | **Word** (`.docx`, `.docm`, `.dotx`) | estilos con herencia (`basedOn`, valores por defecto), formato de texto, listas con niveles y reinicios, tablas (celdas combinadas, bordes, sombreado, estilos de tabla con filas alternas), imágenes (con recorte), tabuladores con puntos de relleno, secciones con página apaisada o columnas, encabezados y pies con número de página, notas al pie, enlaces |
-| **Excel** (`.xlsx`, `.xlsm`, CSV) | formatos de número, fecha y moneda (`#,##0.00 "€"`, `dd/mm/yyyy`, `0,0%`, colores `[Red]`), estilos de celda, celdas combinadas, anchos y alturas, filas/columnas ocultas, área de impresión y repetición de títulos; las hojas muy anchas se reparten en bandas de columnas |
-| **PowerPoint** (`.pptx`, `.ppsx`) | una página por diapositiva con el tamaño de la presentación: textos con herencia del patrón (viñetas, numeración, tamaños), formas (rectángulos, elipses, flechas, formas libres) en SVG con relleno, degradado y contorno, imágenes con recorte, tablas con estilo, grupos, fondos |
+| **Excel** (`.xlsx`, `.xlsm`, CSV) | formatos de número, fecha y moneda (`#,##0.00 "€"`, `dd/mm/yyyy`, `0,0%`, colores `[Red]`), estilos de celda, celdas combinadas, anchos y alturas, filas/columnas ocultas, área de impresión y repetición de títulos, **gráficos e imágenes** colocados sobre las celdas donde están anclados; las hojas muy anchas se reparten en bandas de columnas |
+| **PowerPoint** (`.pptx`, `.ppsx`) | una página por diapositiva con el tamaño de la presentación: textos con herencia del patrón (viñetas, numeración, tamaños), formas (rectángulos, elipses, flechas, formas libres) en SVG con relleno, degradado y contorno, imágenes con recorte, tablas con estilo, gráficos, grupos, fondos |
 
 El HTML intermedio no puede cargar nada de fuera (política de contenido `default-src 'none'`), no lleva scripts y escapa todo el texto del documento.
 
 ### Límites conocidos
 - No se leen los formatos antiguos (`.doc`, `.xls`, `.ppt`), RTF ni OpenDocument: la app explica cómo guardarlos como `.docx`, `.xlsx` o `.pptx`.
-- Los **gráficos** (Excel, Word, PowerPoint) y los objetos SmartArt se sustituyen por un recuadro y se avisa; las imágenes EMF/WMF no se pueden mostrar.
+- Los **gráficos** (Excel, Word, PowerPoint) se dibujan a partir de los datos que guarda el archivo: columnas, barras, líneas, áreas, sectores, anillos y dispersión, con título, ejes, leyenda y
+  etiquetas de datos (incluidos los de librerías que no guardan los datos en el gráfico, que se leen de las celdas). Los demás tipos (radar, burbujas, cotizaciones…), los ejes secundarios,
+  los objetos SmartArt y las imágenes EMF/WMF se sustituyen por un recuadro y se avisa.
 - Las **fórmulas** de Excel se muestran con el último valor calculado que guardó Excel; un libro creado por una librería sin valores guardados saldrá con esas celdas vacías.
 - La paginación puede diferir de la de Word en algún salto de página, y las fuentes que no estén instaladas se sustituyen por otras parecidas.
 

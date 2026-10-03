@@ -1,8 +1,9 @@
 // Excel (.xlsx) → HTML autocontenido: cada hoja es una tabla con sus estilos, combinaciones, anchos y formatos de número.
-import { Paquete, aplicarTint, escaparHtml, familiaCss, hexARgb, leerTema, limpiarControl, r2, rgbAHex, type Tema } from './comun';
+import { Paquete, aplicarTint, escaparHtml, familiaCss, hexARgb, imagenComoDatos, leerTema, limpiarControl, r2, rgbAHex, type Tema } from './comun';
+import { completarCaches, graficoASvg } from './grafico';
 import type { ResultadoOffice } from './docx';
 import { colorFormato, FORMATOS_INTEGRADOS, formatearValor, type OpcionesFormato } from './xlsxFormato';
-import { hijo, hijos, num, type Nodo } from './xml';
+import { descendiente, hijo, hijos, num, type Nodo } from './xml';
 
 const MAX_FILAS = 10000;
 const MAX_COLUMNAS = 200;
@@ -173,6 +174,22 @@ function anchoColumnaPx(caracteres: number): number {
   return Math.max(0, Math.trunc(caracteres * 7 + 5));
 }
 
+/** Valores (texto) de las celdas de una hoja, por «fila,columna» */
+function valoresDeHoja(hoja: Nodo, compartidas: string[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const fila of hijos(hijo(hoja, 'sheetData'), 'row')) {
+    for (const c of hijos(fila, 'c')) {
+      const ref = c.a.r ? leerReferencia(c.a.r) : null;
+      if (!ref) continue;
+      const v = hijo(c, 'v')?.t;
+      const t = c.a.t ?? 'n';
+      const valor = t === 's' && v !== undefined ? (compartidas[Number(v)] ?? '') : t === 'inlineStr' ? textoDeSi(hijo(c, 'is') ?? { n: 'is', a: {}, h: [], t: '' }) : (v ?? '');
+      if (valor !== '') m.set(`${ref.fila},${ref.col}`, valor);
+    }
+  }
+  return m;
+}
+
 export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFormato> = {}): Promise<ResultadoOffice> {
   const paquete = await Paquete.abrir(datos);
   const libro = await paquete.xml('xl/workbook.xml');
@@ -242,6 +259,23 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
     return c;
   };
 
+  // Hojas ya leídas (por si un gráfico apunta a celdas de otra hoja)
+  const cacheHojas = new Map<string, Nodo>();
+  const cacheValores = new Map<string, Map<string, string>>();
+  for (const hx of hojasXml) {
+    const rel = rels.get(hx.a.id ?? '');
+    const nodo = rel ? await paquete.xml(rel.destino) : null;
+    if (rel && nodo) cacheHojas.set(rel.destino, nodo);
+  }
+  const valoresPorHoja = (destino: string, nodo: Nodo) => {
+    let v = cacheValores.get(destino);
+    if (!v) {
+      v = valoresDeHoja(nodo, compartidas);
+      cacheValores.set(destino, v);
+    }
+    return v;
+  };
+
   const hojas: string[] = [];
   const reglasPagina: string[] = [];
   let numeroHoja = 0;
@@ -250,7 +284,7 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
     if (hx.a.state === 'hidden' || hx.a.state === 'veryHidden') continue;
     const rel = rels.get(hx.a.id ?? '');
     if (!rel) continue;
-    const hoja = await paquete.xml(rel.destino);
+    const hoja = cacheHojas.get(rel.destino) ?? null;
     if (!hoja) continue;
     const nombreHoja = hx.a.name ?? `Hoja${idx + 1}`;
 
@@ -342,13 +376,86 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
       c1 = 1;
     }
     const orientacion = hijo(hoja, 'pageSetup')?.a.orientation === 'landscape' ? 'landscape' : 'portrait';
+
+    // Gráficos e imágenes de la hoja (xdr:wsDr): se colocan sobre la tabla según las celdas en las que están ancladas
+    interface Objeto {
+      col1: number; fila1: number; col2: number; fila2: number;
+      dx1: number; dy1: number; dx2: number; dy2: number;
+      ancho: number; alto: number;
+      grafico?: Nodo;
+      imagen?: string;
+    }
+    const objetos: Objeto[] = [];
+    const rutaDibujo = hijo(hoja, 'drawing')?.a.id ? (await paquete.relaciones(rel.destino)).get(hijo(hoja, 'drawing')!.a.id!)?.destino : undefined;
+    if (rutaDibujo) {
+      const dibujo = await paquete.xml(rutaDibujo);
+      const relsDibujo = await paquete.relaciones(rutaDibujo);
+      for (const anclaje of dibujo?.h ?? []) {
+        if (!/Anchor$/.test(anclaje.n)) continue;
+        const marco = hijo(anclaje, 'graphicFrame') ?? hijo(anclaje, 'pic') ?? hijo(hijo(anclaje, 'AlternateContent'), 'Choice')?.h.find((x) => x.n === 'graphicFrame');
+        if (!marco) continue;
+        const desde = hijo(anclaje, 'from');
+        const hasta = hijo(anclaje, 'to');
+        const ext = hijo(anclaje, 'ext') ?? descendiente(hijo(marco, 'xfrm') ?? hijo(hijo(marco, 'spPr'), 'xfrm'), 'ext');
+        const emu = (n: Nodo | undefined, nombre: string) => Number(hijo(n, nombre)?.t ?? 0);
+        const o: Objeto = {
+          col1: emu(desde, 'col'), fila1: emu(desde, 'row'), dx1: emu(desde, 'colOff'), dy1: emu(desde, 'rowOff'),
+          col2: hasta ? emu(hasta, 'col') : -1, fila2: hasta ? emu(hasta, 'row') : -1, dx2: emu(hasta, 'colOff'), dy2: emu(hasta, 'rowOff'),
+          ancho: num(ext, 'cx'), alto: num(ext, 'cy'),
+        };
+        const idGrafico = descendiente(marco, 'chart')?.a.id;
+        const idImagen = descendiente(marco, 'blip')?.a.embed;
+        if (idGrafico) {
+          const destino = relsDibujo.get(idGrafico)?.destino;
+          const raizGrafico = destino ? await paquete.xml(destino) : null;
+          if (raizGrafico) {
+            // Datos sin caché (gráficos de librerías): se leen de las celdas a las que apuntan
+            completarCaches(raizGrafico, (formula) => {
+              const m = /^(?:'((?:[^']|'')+)'|([^!']+))!(.+)$/.exec(formula.trim());
+              if (!m) return null;
+              const nombreHojaRef = (m[1] ?? m[2]).replace(/''/g, "'");
+              const rango = leerRango(m[3].replace(/\$/g, ''));
+              const idxHoja = hojasXml.findIndex((hx2) => hx2.a.name === nombreHojaRef);
+              const relHoja = idxHoja >= 0 ? rels.get(hojasXml[idxHoja].a.id ?? '') : undefined;
+              const nodoHoja = relHoja ? cacheHojas.get(relHoja.destino) : undefined;
+              if (!rango || !nodoHoja) return null;
+              const valores = valoresPorHoja(relHoja!.destino, nodoHoja);
+              const salida: string[] = [];
+              for (let f = rango.f1; f <= rango.f2; f++) for (let c = rango.c1; c <= rango.c2; c++) salida.push(valores.get(`${f},${c}`) ?? '');
+              return salida;
+            });
+            o.grafico = raizGrafico;
+          }
+        } else if (idImagen) {
+          const destino = relsDibujo.get(idImagen)?.destino;
+          const d = destino ? await imagenComoDatos(paquete, destino) : null;
+          if (d) o.imagen = d.uri;
+        }
+        if (o.grafico || o.imagen) objetos.push(o);
+        else avisos.add('Algún objeto de una hoja de Excel (forma, SmartArt…) no se puede dibujar.');
+      }
+      // El área impresa abarca también lo que cubren los gráficos
+      for (const o of objetos) {
+        let col2 = o.col2;
+        let fila2 = o.fila2;
+        if (col2 < 0) {
+          let resto = (o.ancho + o.dx1) / 9525;
+          col2 = o.col1;
+          while (resto > 0 && col2 < MAX_COLUMNAS) resto -= ocultas.has(col2 + 1) ? 0 : (anchos.get(col2 + 1) ?? anchoDefecto), col2++;
+        }
+        if (fila2 < 0) {
+          let resto = (o.alto + o.dy1) / 9525;
+          fila2 = o.fila1;
+          while (resto > 0 && fila2 < MAX_FILAS) resto -= ((altos.get(fila2 + 1) ?? altoDefecto) * 4) / 3, fila2++;
+        }
+        c2 = Math.min(MAX_COLUMNAS, Math.max(c2, col2 + 1));
+        f2 = Math.min(MAX_FILAS, Math.max(f2, fila2 + 1));
+      }
+    }
     if (f2 < f1 || c2 < c1) {
       continue; // hoja vacía: no se imprime
     }
     numeroHoja++;
-
-    const imagenes = hijo(hoja, 'drawing');
-    if (imagenes) avisos.add('Los gráficos e imágenes dentro de las hojas de Excel no se incluyen en el PDF.');
 
     const gridLines = hijo(hoja, 'printOptions')?.a.gridLines === '1' || hijo(hoja, 'printOptions')?.a.gridLines === 'true';
     const cabecera = titulosFilas.get(idx);
@@ -467,7 +574,40 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
       return `<table style="border-collapse:collapse;table-layout:fixed;width:${total}px">${colgroup}${nCab ? `<thead>${filasHtml.slice(0, nCab).join('')}</thead><tbody>${filasHtml.slice(nCab).join('')}</tbody>` : `<tbody>${filasHtml.join('')}</tbody>`}</table>`;
     };
 
-    const tablas = bandas.map((b, i) => `<div style="zoom:${r2(zoom)};${i > 0 ? 'break-before:page;' : ''}${centrada ? 'display:flex;justify-content:center' : ''}">${tablaDeBanda(b)}</div>`);
+    // Posición (px) de cada columna y fila respecto a la esquina de la tabla
+    const xDeColumna = (col0: number, banda: number[]) => {
+      let x = 0;
+      for (const c of banda) {
+        if (c - 1 >= col0) break;
+        x += anchoDe(c);
+      }
+      return x;
+    };
+    const yDeFila = (fila0: number) => {
+      let y = 0;
+      for (const f of filasVisibles) {
+        if (f - 1 >= fila0) break;
+        y += ((altos.get(f) ?? altoDefecto) * 4) / 3;
+      }
+      return y;
+    };
+    const superponer = (banda: number[]): string =>
+      objetos
+        .filter((o) => banda.includes(o.col1 + 1))
+        .map((o) => {
+          const x = xDeColumna(o.col1, banda) + o.dx1 / 9525;
+          const y = yDeFila(o.fila1) + o.dy1 / 9525;
+          const wPx = o.col2 >= 0 ? xDeColumna(o.col2, banda) + o.dx2 / 9525 - x : o.ancho / 9525;
+          const hPx = o.fila2 >= 0 ? yDeFila(o.fila2) + o.dy2 / 9525 - y : o.alto / 9525;
+          if (wPx < 4 || hPx < 4) return '';
+          const caja = `position:absolute;left:${r2(x)}px;top:${r2(y)}px;width:${r2(wPx)}px;height:${r2(hPx)}px`;
+          if (o.imagen) return `<img src="${o.imagen}" alt="" style="${caja};object-fit:fill">`;
+          const g = graficoASvg(o.grafico!, wPx * 0.75, hPx * 0.75, tema, fmt);
+          if (g.aviso) avisos.add(`Gráficos de Excel: ${g.aviso}.`);
+          return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r2(wPx * 0.75)} ${r2(hPx * 0.75)}" style="${caja}">${g.svg}</svg>`;
+        })
+        .join('');
+    const tablas = bandas.map((b, i) => `<div style="zoom:${r2(zoom)};${i > 0 ? 'break-before:page;' : ''}${centrada ? 'display:flex;justify-content:center' : ''}"><div style="position:relative">${tablaDeBanda(b)}${superponer(b)}</div></div>`);
     reglasPagina.push(`@page h${numeroHoja}{size:${r2((ancho / 25.4) * 72)}pt ${r2((alto / 25.4) * 72)}pt;margin:${r2(mSup)}pt ${r2(mDer)}pt ${r2(mInf)}pt ${r2(mIzq)}pt}`);
     hojas.push(`<section style="page:h${numeroHoja}">${tablas.join('')}</section>`);
   }

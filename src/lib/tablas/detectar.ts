@@ -148,6 +148,20 @@ function construirTabla(filas: FilaCruda[], pagina: number): Tabla | null {
   };
 }
 
+/**
+ * Un texto a dos columnas (o justificado) parece una tabla: filas con celdas alineadas. Se distingue porque sus «celdas» son trozos de frases:
+ * muchas empiezan en minúscula o tienen varias palabras, mientras que en una tabla hay cifras, etiquetas cortas y mayúsculas.
+ */
+export function esTextoEnColumnas(t: Tabla): boolean {
+  const celdas = t.filas.flat().map((c) => c.trim()).filter(Boolean);
+  if (celdas.length < 4) return false;
+  const palabras = (c: string) => c.split(/\s+/).filter(Boolean).length;
+  const largas = celdas.filter((c) => palabras(c) >= 4).length / celdas.length;
+  // «desde», «hacía»: empiezan por una palabra en minúscula (los códigos como «a1» o «x2» no cuentan)
+  const minuscula = celdas.filter((c) => /^[a-záéíóúüñàèìòùâêîôûç]{3,}(?![\d])/.test(c)).length / celdas.length;
+  return minuscula >= 0.4 || (largas >= 0.6 && t.columnas.length <= 3);
+}
+
 /** Separa en cada página las tablas (filas con varias celdas alineadas en columnas) del resto del texto. */
 export function detectarTablas(pagina: PaginaExtraida, opciones: OpcionesDeteccion = {}): PaginaTablas {
   const filas = filasCrudas(pagina, opciones);
@@ -178,7 +192,7 @@ export function detectarTablas(pagina: PaginaExtraida, opciones: OpcionesDetecci
   const usadas = new Set<FilaCruda>();
   for (const b of bloques) {
     const t = construirTabla(b, pagina.indice);
-    if (!t || t.columnas.length < 2) continue;
+    if (!t || t.columnas.length < 2 || esTextoEnColumnas(t)) continue;
     tablas.push(t);
     b.forEach((f) => usadas.add(f));
   }

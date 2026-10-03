@@ -115,6 +115,24 @@ describe('detección de tablas (páginas sintéticas)', () => {
     expect(r.tablas[0].filas[1]).toEqual(['Subtotal de la sección A completa', '', '']);
   });
 
+  it('un texto a dos columnas no es una tabla (aunque las líneas estén alineadas)', () => {
+    const izq = ['dedos, leyendo los lomos en', 'baja. Entre las novelas gastadas', 'los manuales de jardinería y los', 'apareció, por fin, un cuaderno de', 'tapas azules sin título ni autor'];
+    const der = ['La lluvia caía sobre la ciudad', 'desde hacía tres días, y nadie', 'recordaba un otoño tan gris.', 'Marta cruzó la plaza con el', 'paraguas cerrado, como si fuera'];
+    const f = izq.flatMap((t, i) => [frag(t, 50, 500 - i * 14, { ancho: 140 }), frag(der[i], 230, 500 - i * 14, { ancho: 140 })]);
+    expect(detectarTablas(pagina(0, f)).tablas).toHaveLength(0);
+    // y el mismo texto sigue contando como texto de la página
+    expect(detectarTablas(pagina(0, f)).texto.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('las viñetas y numeraciones se pueden unir con su texto (no son una columna)', () => {
+    const items = ['Primer punto de la lista', 'Segundo punto de la lista', 'Tercer punto de la lista'];
+    const f = items.flatMap((t, i) => [frag('•', 58, 500 - i * 16), frag(t, 80, 500 - i * 16)]);
+    expect(detectarTablas(pagina(0, f)).tablas).toHaveLength(1); // sin la opción, son dos columnas
+    const r = detectarTablas(pagina(0, f), { fusionarMarcadores: true });
+    expect(r.tablas).toHaveLength(0);
+    expect(r.texto).toEqual(['• Primer punto de la lista', '• Segundo punto de la lista', '• Tercer punto de la lista']);
+  });
+
   it('une tablas que continúan en la página siguiente y omite la cabecera repetida', async () => {
     const p1 = pagina(0, [...fila(80, 'Producto', 'Unidades', 'Precio', { negrita: true }), ...fila(64, 'a', '1', '2'), ...fila(48, 'b', '3', '4')]);
     const p2 = pagina(1, [...fila(560, 'Producto', 'Unidades', 'Precio', { negrita: true }), ...fila(544, 'c', '5', '6'), ...fila(528, 'd', '7', '8')]);

@@ -6,6 +6,8 @@ import { abrirApp, carpetaTemporal, irA, simularGuardado, subir } from './util';
 import { crearPdf, textosPorPagina } from '../util/pdfs';
 import { crearLibroPdf, hayLibreOffice } from '../util/libro';
 import { leerEpub } from '../util/epub';
+import { crearDocumentoPdf, crearPresentacionPdf } from '../util/documento';
+import JSZip from 'jszip';
 
 // Estas pruebas solo tienen sentido contra la app empaquetada: PDFREAAAADER_EXE=release/linux-unpacked/pdf_reaaaader
 test.skip(!process.env.PDFREAAAADER_EXE, 'se ejecutan con PDFREAAAADER_EXE apuntando a la app empaquetada');
@@ -168,5 +170,39 @@ test('empaquetada: Word → PDF → EPUB encadenado dentro de la app', async () 
   plano = plano.replace(/\s+/g, ' ');
   expect(plano).toContain('Informe trimestral de ventas');
   expect(plano).toContain('Preparar los datos');
+  await app.close();
+});
+
+test('empaquetada: PDF a Word y PDF a PowerPoint (pdf.js y canvas dentro de la app)', async () => {
+  test.setTimeout(240_000);
+  const { app, page } = await abrirApp();
+  const docx = path.join(dir, 'salida.docx');
+  const pdfDoc = path.join(dir, 'doc.pdf');
+  fs.writeFileSync(pdfDoc, await crearDocumentoPdf());
+  await simularGuardado(app, [docx]);
+  await irA(page, 'pdf-a-word');
+  await subir(page, pdfDoc);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId('resumen-word')).toContainText('Tablas: 1');
+  const zw = await JSZip.loadAsync(fs.readFileSync(docx));
+  const xml = await zw.file('word/document.xml')!.async('string');
+  expect(xml).toContain('<w:tbl>');
+  expect(xml).toContain('<w:drawing>');
+  expect(xml.replace(/<[^>]+>/g, ' ')).toContain('Informe de resultados');
+
+  const pptx = path.join(dir, 'salida.pptx');
+  const pdfPres = path.join(dir, 'pres.pdf');
+  fs.writeFileSync(pdfPres, await crearPresentacionPdf());
+  await simularGuardado(app, [pptx]);
+  await irA(page, 'pdf-a-powerpoint');
+  await subir(page, pdfPres);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId('resumen-pptx')).toContainText('Cuadros de texto editables: 5');
+  const zp = await JSZip.loadAsync(fs.readFileSync(pptx));
+  const s1 = await zp.file('ppt/slides/slide1.xml')!.async('string');
+  expect(s1).toContain('Plan de lanzamiento');
+  expect(s1).toMatch(/srgbClr val="FFFFFF"/); // el color del título se averigua dibujando la página con y sin texto
   await app.close();
 });

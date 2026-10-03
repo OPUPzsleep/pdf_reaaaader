@@ -94,6 +94,80 @@ test('Convertir a JPG: PNG y SVG → ZIP', async () => {
   await app.close();
 });
 
+test('JPG a PNG: un archivo suelto y un lote en ZIP', async () => {
+  const { app, page } = await abrirApp();
+  const unico = path.join(dir, 'foto.png');
+  await simularGuardado(app, [unico]);
+  const jpg = (w: number, h: number, color: string) => sharp({ create: { width: w, height: h, channels: 3, background: color } }).jpeg().toBuffer();
+  await irA(page, 'jpg-a-png');
+  await subir(page, escribir('foto.jpg', await jpg(70, 50, '#3366cc')));
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible();
+  const m = await meta(unico);
+  expect([m.format, m.width, m.height]).toEqual(['png', 70, 50]);
+
+  // Varios JPG: un ZIP con un PNG por cada uno (y también acepta .jpeg)
+  const lote = path.join(dir, 'pngs.zip');
+  await simularGuardado(app, [lote]);
+  await page.getByRole('button', { name: 'Quitar foto.jpg' }).click();
+  await subir(page, [escribir('uno.jpg', await jpg(30, 30, '#cc0000')), escribir('dos.jpeg', await jpg(40, 20, '#00cc00'))]);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toContainText('2 imágenes');
+  const zip = await JSZip.loadAsync(fs.readFileSync(lote));
+  expect(Object.keys(zip.files).sort()).toEqual(['dos.png', 'uno.png']);
+  expect((await sharp(await zip.file('dos.png')!.async('nodebuffer')).metadata()).format).toBe('png');
+  await app.close();
+});
+
+test('PNG a JPG: la transparencia se rellena con el color de fondo elegido', async () => {
+  const { app, page } = await abrirApp();
+  // PNG de 40×40 totalmente transparente salvo un cuadrado rojo opaco en la esquina superior izquierda
+  const rojo = await sharp({ create: { width: 10, height: 10, channels: 4, background: '#ff0000' } }).png().toBuffer();
+  const origen = escribir(
+    'transparente.png',
+    await sharp({ create: { width: 40, height: 40, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: rojo, left: 0, top: 0 }])
+      .png()
+      .toBuffer(),
+  );
+  const pixel = async (ruta: string, x: number, y: number) => {
+    const { data, info } = await sharp(ruta).raw().toBuffer({ resolveWithObject: true });
+    const i = (y * info.width + x) * info.channels;
+    return [data[i], data[i + 1], data[i + 2]];
+  };
+
+  // Por defecto, fondo blanco
+  const blanco = path.join(dir, 'transparente.jpg');
+  await simularGuardado(app, [blanco]);
+  await irA(page, 'png-a-jpg');
+  await subir(page, origen);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible();
+  const m = await meta(blanco);
+  expect([m.format, m.width, m.height, m.hasAlpha]).toEqual(['jpeg', 40, 40, false]);
+  const [r0, g0, b0] = await pixel(blanco, 35, 35);
+  expect(Math.min(r0, g0, b0)).toBeGreaterThan(240); // blanco
+  const [r1, g1, b1] = await pixel(blanco, 3, 3);
+  expect(r1).toBeGreaterThan(200); // el cuadrado rojo se conserva
+  expect(g1).toBeLessThan(60);
+  expect(b1).toBeLessThan(60);
+
+  // Con otro color de fondo y menos calidad
+  const verde = path.join(dir, 'transparente_verde.jpg');
+  await simularGuardado(app, [verde]);
+  await page.getByRole('button', { name: 'Quitar transparente.png' }).click();
+  await subir(page, origen);
+  await page.getByTestId('fondo').fill('#00ff00');
+  await page.getByTestId('calidad').fill('70');
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible();
+  const [r2, g2, b2] = await pixel(verde, 35, 35);
+  expect(g2).toBeGreaterThan(220);
+  expect(r2).toBeLessThan(60);
+  expect(b2).toBeLessThan(60);
+  await app.close();
+});
+
 test('Convertir desde JPG a WebP', async () => {
   const { app, page } = await abrirApp();
   const salida = path.join(dir, 'foto.webp');

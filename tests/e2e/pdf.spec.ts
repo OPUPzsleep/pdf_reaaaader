@@ -6,6 +6,8 @@ import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { abrirApp, carpetaTemporal, irA, simularGuardado, subir } from './util';
 import { crearPdf, textosPorPagina } from '../util/pdfs';
+import { ejecutarQpdf, ENTRADA, SALIDA } from '../../src/lib/pdf/qpdf';
+import { inspeccionarProteccion } from '../../src/lib/pdf/desbloquear';
 
 const dir = carpetaTemporal();
 const escribir = (nombre: string, datos: Uint8Array | Buffer) => {
@@ -79,6 +81,148 @@ test('Eliminar páginas: por rango y por clic en miniatura', async () => {
   await expect(page.getByTestId('resultado')).toContainText('2 páginas restantes');
   expect(await textosPorPagina(leer(salida))).toEqual(['Página 1', 'Página 4']);
   await page.screenshot({ path: 'tests/capturas/eliminar-paginas.png' });
+  await app.close();
+});
+
+test('Eliminar páginas: vista previa emergente de la página que se elimina', async () => {
+  const { app, page } = await abrirApp();
+  const origen = escribir('seis.pdf', await crearPdf(6));
+  const salida = path.join(dir, 'sin-previa.pdf');
+  await simularGuardado(app, [salida]);
+
+  await irA(page, 'eliminar-paginas');
+  await subir(page, origen);
+  const miniaturas = page.getByTestId('miniatura-pagina');
+  await expect(miniaturas).toHaveCount(6);
+  const vista = page.getByTestId('vista-pagina');
+
+  // La lupa de la miniatura abre la página en grande, ya dibujada, sin marcarla
+  await page.getByTestId('ver-pagina').nth(2).click();
+  await expect(vista).toBeVisible();
+  await expect(vista).toContainText('Página 3 de 6');
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se conservará');
+  await expect(page.getByTestId('vista-lienzo')).not.toHaveClass(/cargando/);
+  const caja = await page.getByTestId('vista-lienzo').boundingBox();
+  expect(caja!.width).toBeGreaterThan(300); // mucho mayor que la miniatura de 130 px
+  await expect(miniaturas.nth(2)).toHaveAttribute('aria-pressed', 'false');
+  await page.screenshot({ path: 'tests/capturas/vista-previa-pagina.png' });
+
+  // Desde la ventana se marca la página y se navega con las flechas del teclado
+  await page.getByTestId('vista-alternar').click();
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se eliminará');
+  await expect(page.getByTestId('vista-alternar')).toContainText('No eliminar esta página');
+  await expect(miniaturas.nth(2)).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: 'tests/capturas/vista-previa-eliminar.png' });
+  await page.keyboard.press('ArrowRight');
+  await expect(vista).toContainText('Página 4 de 6');
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se conservará');
+  await page.getByTestId('vista-anterior').click();
+  await expect(vista).toContainText('Página 3 de 6');
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se eliminará');
+
+  // Esc cierra y la selección se mantiene
+  await page.keyboard.press('Escape');
+  await expect(vista).toHaveCount(0);
+  await expect(page.getByTestId('campo-rango')).toHaveValue('3');
+
+  // «Revisar selección» recorre solo las páginas elegidas
+  await page.getByTestId('campo-rango').fill('2, 5');
+  await page.getByTestId('revisar-seleccion').click();
+  await expect(vista).toContainText('Página 2 de 6');
+  await expect(vista).toContainText('1 de 2');
+  await page.getByTestId('vista-siguiente').click();
+  await expect(vista).toContainText('Página 5 de 6');
+  await expect(page.getByTestId('vista-siguiente')).toBeDisabled();
+  await page.getByTestId('vista-cerrar').click();
+  await expect(vista).toHaveCount(0);
+
+  // La opción se recuerda entre sesiones: pase lo que pase, se deja como estaba para no afectar a las demás pruebas
+  const alClic = page.getByLabel('Ver la página en grande al hacer clic en una miniatura');
+  try {
+    // Con la opción activada, el clic en la miniatura abre la vista previa en vez de marcar
+    await alClic.check();
+    await miniaturas.nth(0).click();
+    await expect(vista).toContainText('Página 1 de 6');
+    await expect(miniaturas.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    await page.getByTestId('vista-alternar').click();
+    await expect(miniaturas.nth(0)).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('campo-rango')).toHaveValue('1-2, 5');
+
+    await page.getByTestId('accion').click();
+    await expect(page.getByTestId('resultado')).toContainText('3 páginas restantes');
+    expect(await textosPorPagina(leer(salida))).toEqual(['Página 3', 'Página 4', 'Página 6']);
+  } finally {
+    await alClic.uncheck();
+  }
+  await app.close();
+});
+
+const WASM_QPDF = path.resolve('node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
+
+async function cifrarPdf(datos: Uint8Array, ...args: string[]): Promise<Uint8Array> {
+  const r = await ejecutarQpdf(datos, [ENTRADA, ...args, SALIDA], WASM_QPDF, true);
+  if (!r.salida) throw new Error('qpdf no pudo cifrar el PDF de prueba');
+  return r.salida;
+}
+
+test('Desbloquear PDF: pide la contraseña, rechaza la incorrecta y guarda una copia sin protección', async () => {
+  const { app, page } = await abrirApp();
+  const original = await crearPdf(3, { texto: (i) => `Secreto ${i}` });
+  const cifrado = escribir('con-clave.pdf', await cifrarPdf(original, '--encrypt', 'abrete', 'dueno', '256', '--'));
+  const salida = path.join(dir, 'con-clave_desbloqueado.pdf');
+  await simularGuardado(app, [salida]);
+
+  await irA(page, 'desbloquear-pdf');
+  await subir(page, cifrado);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('pide una contraseña');
+  await expect(page.getByTestId('accion')).toBeDisabled(); // hasta que se escribe algo
+  await page.screenshot({ path: 'tests/capturas/desbloquear-pdf.png' });
+
+  // Contraseña incorrecta: error claro y se puede reintentar
+  await page.getByTestId('campo-clave').fill('equivocada');
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('error')).toContainText('La contraseña no es correcta');
+  await expect(page.getByTestId('resultado')).toHaveCount(0);
+
+  // Contraseña correcta (con Intro)
+  await page.getByTestId('campo-clave').fill('abrete');
+  await expect(page.getByTestId('error')).toHaveCount(0);
+  await page.getByTestId('campo-clave').press('Enter');
+  await expect(page.getByTestId('resultado')).toContainText('Sin contraseña ni restricciones');
+  const resultado = leer(salida);
+  expect(await inspeccionarProteccion(resultado, { wasm: WASM_QPDF })).toBe('sin-proteccion');
+  expect(await textosPorPagina(resultado)).toEqual(['Secreto 1', 'Secreto 2', 'Secreto 3']);
+  await app.close();
+});
+
+test('Desbloquear PDF: quita las restricciones sin pedir contraseña y avisa si no hay protección', async () => {
+  const { app, page } = await abrirApp();
+  const original = await crearPdf(2, { texto: (i) => `Texto ${i}` });
+  const restringido = escribir('restringido.pdf', await cifrarPdf(original, '--encrypt', '', 'dueno', '256', '--print=none', '--extract=n', '--'));
+  const libre = escribir('libre.pdf', original);
+  const salida = path.join(dir, 'restringido_desbloqueado.pdf');
+  await simularGuardado(app, [salida]);
+
+  await irA(page, 'desbloquear-pdf');
+  await subir(page, restringido);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('tiene restricciones');
+  await expect(page.getByTestId('campo-clave')).toHaveCount(0);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible();
+  expect(await inspeccionarProteccion(leer(salida), { wasm: WASM_QPDF })).toBe('sin-proteccion');
+  expect(await textosPorPagina(leer(salida))).toEqual(['Texto 1', 'Texto 2']);
+
+  // Un PDF sin protección: se avisa y no hay nada que hacer
+  await page.getByRole('button', { name: 'Cambiar archivo' }).click();
+  await subir(page, libre);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('no tiene contraseña ni restricciones');
+  await expect(page.getByTestId('accion')).toBeDisabled();
+
+  // Un archivo que no es un PDF se rechaza
+  await page.getByRole('button', { name: 'Cambiar archivo' }).click();
+  await subir(page, escribir('falso.pdf', Buffer.from('esto no es un pdf')));
+  await expect(page.locator('.error-texto')).toContainText('no parece un PDF válido');
   await app.close();
 });
 

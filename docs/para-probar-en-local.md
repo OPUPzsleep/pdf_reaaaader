@@ -7,7 +7,7 @@ de Windows, instalador):
 ## Instalación
 
 - [ ] `npm install` y `npm run fetch-binaries` terminan sin errores (descarga ≈ 300 MB).
-- [ ] `npm run dist` crea `release\pdfreaaaader-Setup-1.0.0.exe` y `release\pdfreaaaader-Portable-1.0.0.exe`.
+- [ ] `npm run dist` crea `release\pdfreaaaader-Setup-1.0.1.exe` y `release\pdfreaaaader-Portable-1.0.1.exe`.
 - [ ] El instalador (NSIS) se instala, crea el acceso directo y se desinstala bien; el portable arranca sin instalar.
 - [ ] En una máquina limpia (Windows Sandbox) **sin Office**, las conversiones funcionan con lo que va dentro del instalador (Word, Excel y PowerPoint no necesitan nada más).
 - [ ] El icono aparece en el `.exe`, en la barra de tareas y en el acceso directo.

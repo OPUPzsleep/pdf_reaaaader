@@ -8,6 +8,7 @@ import { crearLibroPdf, hayLibreOffice } from '../util/libro';
 import { leerEpub } from '../util/epub';
 import { crearDocumentoPdf, crearPresentacionPdf } from '../util/documento';
 import JSZip from 'jszip';
+import { ejecutarQpdf, ENTRADA, SALIDA } from '../../src/lib/pdf/qpdf';
 
 // Estas pruebas solo tienen sentido contra la app empaquetada: PDFREAAAADER_EXE=release/linux-unpacked/pdf_reaaaader
 test.skip(!process.env.PDFREAAAADER_EXE, 'se ejecutan con PDFREAAAADER_EXE apuntando a la app empaquetada');
@@ -53,6 +54,24 @@ test('empaquetada: imágenes con sharp (módulo nativo fuera del asar)', async (
   await expect(page.getByTestId('resultado')).toBeVisible();
   const m = await sharp(salida).metadata();
   expect([m.width, m.height]).toEqual([150, 50]);
+  await app.close();
+});
+
+test('empaquetada: Desbloquear PDF (qpdf WebAssembly desde el asar)', async () => {
+  const { app, page } = await abrirApp();
+  const wasm = path.resolve('node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
+  const cifrado = await ejecutarQpdf(await crearPdf(2, { texto: (i) => `Reservado ${i}` }), [ENTRADA, '--encrypt', 'llave', 'dueno', '256', '--', SALIDA], wasm, true);
+  const origen = path.join(dir, 'protegido.pdf');
+  fs.writeFileSync(origen, cifrado.salida!);
+  const salida = path.join(dir, 'protegido_desbloqueado.pdf');
+  await simularGuardado(app, [salida]);
+  await irA(page, 'desbloquear-pdf');
+  await subir(page, origen);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('pide una contraseña');
+  await page.getByTestId('campo-clave').fill('llave');
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible();
+  expect(await textosPorPagina(leer(salida))).toEqual(['Reservado 1', 'Reservado 2']);
   await app.close();
 });
 

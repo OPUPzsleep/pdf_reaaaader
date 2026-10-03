@@ -26,8 +26,11 @@ Electron + Vite + React + TypeScript. Tema claro y oscuro (se recuerda la elecci
 | | PDF a PDF/A | Ghostscript (PDF/A-2b con perfil sRGB) |
 | | **PDF a EPUB** | motor propio en JavaScript (ver más abajo) |
 | **Modificar PDF** | Rotar PDF · Números de página | `pdf-lib` (el número queda derecho aunque la página esté girada) |
+| **Seguridad de PDF** | Desbloquear PDF | `qpdf` compilado a WebAssembly (funciona sin conexión): quita la contraseña de apertura —si la conoces— y las restricciones de imprimir, copiar o editar (RC4 y AES de 128/256 bits). No adivina contraseñas |
 | **Imágenes** | Redimensionar · Recortar · Girar | `sharp`; recorte con selector visual (`react-image-crop`) |
-| | Convertir a JPG / desde JPG · HTML a IMAGEN | `sharp`; captura de página completa por trozos con el depurador de Chromium |
+| | JPG a PNG · PNG a JPG (con color de fondo para la transparencia y calidad) · Convertir a JPG / desde JPG (WebP, GIF, BMP, TIFF, SVG…) · HTML a IMAGEN | `sharp`; captura de página completa por trozos con el depurador de Chromium |
+
+> **Vista previa al eliminar/extraer páginas:** cada miniatura tiene una lupa que abre la página en grande en una ventana emergente (con flechas ← → para recorrerlas, botón para marcarla o desmarcarla y Esc para cerrar). «Revisar selección» recorre solo las páginas elegidas y, si activas «Ver la página en grande al hacer clic en una miniatura», el clic abre directamente esa ventana. Ver `docs/capturas/vista-previa-eliminar.png`.
 
 Todo se procesa en el equipo. Solo «HTML a PDF/IMAGEN» con una dirección web necesita internet, por razones obvias.
 

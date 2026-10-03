@@ -1,7 +1,7 @@
 {
   "name": "pdf_reaaaader",
   "productName": "pdfreaaaader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "pdfreaaaader: herramientas de PDF e imágenes sin conexión, con PDF a EPUB",
   "private": true,
   "type": "module",
@@ -30,6 +30,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@neslinesli93/qpdf-wasm": "^0.3.0",
     "@playwright/test": "^1.63.0",
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/spa": "^1.0.0",

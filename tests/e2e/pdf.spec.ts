@@ -82,6 +82,80 @@ test('Eliminar páginas: por rango y por clic en miniatura', async () => {
   await app.close();
 });
 
+test('Eliminar páginas: vista previa emergente de la página que se elimina', async () => {
+  const { app, page } = await abrirApp();
+  const origen = escribir('seis.pdf', await crearPdf(6));
+  const salida = path.join(dir, 'sin-previa.pdf');
+  await simularGuardado(app, [salida]);
+
+  await irA(page, 'eliminar-paginas');
+  await subir(page, origen);
+  const miniaturas = page.getByTestId('miniatura-pagina');
+  await expect(miniaturas).toHaveCount(6);
+  const vista = page.getByTestId('vista-pagina');
+
+  // La lupa de la miniatura abre la página en grande, ya dibujada, sin marcarla
+  await page.getByTestId('ver-pagina').nth(2).click();
+  await expect(vista).toBeVisible();
+  await expect(vista).toContainText('Página 3 de 6');
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se conservará');
+  await expect(page.getByTestId('vista-lienzo')).not.toHaveClass(/cargando/);
+  const caja = await page.getByTestId('vista-lienzo').boundingBox();
+  expect(caja!.width).toBeGreaterThan(300); // mucho mayor que la miniatura de 130 px
+  await expect(miniaturas.nth(2)).toHaveAttribute('aria-pressed', 'false');
+  await page.screenshot({ path: 'tests/capturas/vista-previa-pagina.png' });
+
+  // Desde la ventana se marca la página y se navega con las flechas del teclado
+  await page.getByTestId('vista-alternar').click();
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se eliminará');
+  await expect(page.getByTestId('vista-alternar')).toContainText('No eliminar esta página');
+  await expect(miniaturas.nth(2)).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: 'tests/capturas/vista-previa-eliminar.png' });
+  await page.keyboard.press('ArrowRight');
+  await expect(vista).toContainText('Página 4 de 6');
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se conservará');
+  await page.getByTestId('vista-anterior').click();
+  await expect(vista).toContainText('Página 3 de 6');
+  await expect(page.getByTestId('vista-estado')).toHaveText('Se eliminará');
+
+  // Esc cierra y la selección se mantiene
+  await page.keyboard.press('Escape');
+  await expect(vista).toHaveCount(0);
+  await expect(page.getByTestId('campo-rango')).toHaveValue('3');
+
+  // «Revisar selección» recorre solo las páginas elegidas
+  await page.getByTestId('campo-rango').fill('2, 5');
+  await page.getByTestId('revisar-seleccion').click();
+  await expect(vista).toContainText('Página 2 de 6');
+  await expect(vista).toContainText('1 de 2');
+  await page.getByTestId('vista-siguiente').click();
+  await expect(vista).toContainText('Página 5 de 6');
+  await expect(page.getByTestId('vista-siguiente')).toBeDisabled();
+  await page.getByTestId('vista-cerrar').click();
+  await expect(vista).toHaveCount(0);
+
+  // La opción se recuerda entre sesiones: pase lo que pase, se deja como estaba para no afectar a las demás pruebas
+  const alClic = page.getByLabel('Ver la página en grande al hacer clic en una miniatura');
+  try {
+    // Con la opción activada, el clic en la miniatura abre la vista previa en vez de marcar
+    await alClic.check();
+    await miniaturas.nth(0).click();
+    await expect(vista).toContainText('Página 1 de 6');
+    await expect(miniaturas.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    await page.getByTestId('vista-alternar').click();
+    await expect(miniaturas.nth(0)).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('campo-rango')).toHaveValue('1-2, 5');
+
+    await page.getByTestId('accion').click();
+    await expect(page.getByTestId('resultado')).toContainText('3 páginas restantes');
+    expect(await textosPorPagina(leer(salida))).toEqual(['Página 3', 'Página 4', 'Página 6']);
+  } finally {
+    await alClic.uncheck();
+  }
+  await app.close();
+});
+
 test('Extraer páginas', async () => {
   const { app, page } = await abrirApp();
   const salida = path.join(dir, 'extraido.pdf');

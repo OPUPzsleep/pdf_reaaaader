@@ -29,6 +29,8 @@ Electron + Vite + React + TypeScript. Tema claro y oscuro (se recuerda la elecci
 | **Imágenes** | Redimensionar · Recortar · Girar | `sharp`; recorte con selector visual (`react-image-crop`) |
 | | Convertir a JPG / desde JPG · HTML a IMAGEN | `sharp`; captura de página completa por trozos con el depurador de Chromium |
 
+> **Vista previa al eliminar/extraer páginas:** cada miniatura tiene una lupa que abre la página en grande en una ventana emergente (con flechas ← → para recorrerlas, botón para marcarla o desmarcarla y Esc para cerrar). «Revisar selección» recorre solo las páginas elegidas y, si activas «Ver la página en grande al hacer clic en una miniatura», el clic abre directamente esa ventana. Ver `docs/capturas/vista-previa-eliminar.png`.
+
 Todo se procesa en el equipo. Solo «HTML a PDF/IMAGEN» con una dirección web necesita internet, por razones obvias.
 
 ## PDF a EPUB

@@ -10,6 +10,7 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - package.json
+  - build/icon.png
   - "!**/*.map"
   - "!**/node_modules/*/{README.md,readme.md,CHANGELOG.md,LICENSE.md}"
   # onnxruntime-node trae los binarios de todos los sistemas: solo hace falta el de Windows

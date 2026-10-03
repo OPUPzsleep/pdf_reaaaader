@@ -37,6 +37,7 @@ function crearVentana() {
     minHeight: 620,
     show: false,
     title: 'pdfreaaaader',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     backgroundColor: '#0f1115',
     autoHideMenuBar: true,
     webPreferences: {

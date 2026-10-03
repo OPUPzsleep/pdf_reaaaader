@@ -53,6 +53,14 @@ export function localizarGhostscript({ recursos }: RutasExternas): string | null
   if (env && fs.existsSync(env)) return env;
   const propio = buscarArchivo(path.join(recursos, 'ghostscript'), esWindows ? ['gswin64c.exe', 'gswin32c.exe'] : ['gs']);
   if (propio) return propio;
+  if (esWindows) {
+    // Instalación normal de Ghostscript: C:\Program Files\gs\gs10.xx.x\bin\gswin64c.exe
+    for (const base of [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']]) {
+      if (!base) continue;
+      const r = buscarArchivo(path.join(base, 'gs'), ['gswin64c.exe', 'gswin32c.exe'], 3);
+      if (r) return r;
+    }
+  }
   return enPath(esWindows ? ['gswin64c.exe', 'gswin32c.exe'] : ['gs']);
 }
 
@@ -278,7 +286,8 @@ function enCola<T>(fn: () => Promise<T>): Promise<T> {
   return r;
 }
 
-const urlDePerfil = (dir: string) => 'file://' + (esWindows ? '/' : '') + dir.replace(/\\/g, '/');
+/** URL file:// del perfil de LibreOffice; los espacios y acentos de la ruta (p. ej. el nombre de usuario) van codificados. */
+export const urlDePerfil = (dir: string, windows = esWindows) => 'file://' + (windows ? '/' : '') + encodeURI(dir.replace(/\\/g, '/'));
 
 const FILTROS_SALIDA: Record<'docx' | 'pptx', { ext: string; filtro: string; entrada: string }> = {
   docx: { ext: 'docx', filtro: 'docx:MS Word 2007 XML', entrada: 'writer_pdf_import' },

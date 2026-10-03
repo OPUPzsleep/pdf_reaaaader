@@ -84,6 +84,8 @@ export async function extraerPagina(
     // Texto girado respecto a la página (marcas de agua, textos laterales): se descarta
     if (Math.abs(m[1]) > Math.abs(m[0]) * 0.3 || it.dir === 'ttb') continue;
     const est = infoFuente(it.fontName);
+    // Cursiva sintética: si falta la fuente en cursiva el generador inclina la normal (el texto va con la matriz sesgada)
+    const inclinado = Math.abs(m[2]) > Math.abs(m[3]) * 0.12;
     fragmentos.push({
       texto: it.str,
       x: m[4],
@@ -91,7 +93,7 @@ export async function extraerPagina(
       ancho: it.width * (Math.hypot(vp.transform[0], vp.transform[1]) || 1),
       tam,
       negrita: est.negrita,
-      cursiva: est.cursiva,
+      cursiva: est.cursiva || inclinado,
       mono: est.mono,
     });
   }

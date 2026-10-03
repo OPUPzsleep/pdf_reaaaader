@@ -13,8 +13,9 @@ const textoDeBloque = (b: Bloque): string =>
   b.tipo === 'h' ? b.texto : b.tipo === 'p' || b.tipo === 'li' ? b.spans.map((s) => s.texto).join('') : '';
 
 function titulosSimilares(a: string, b: string): boolean {
-  const x = normalizarClave(a);
-  const y = normalizarClave(b);
+  // Sin espacios: algunos generadores de PDF pierden el espacio donde el título salta de línea
+  const x = normalizarClave(a).replace(/ /g, '');
+  const y = normalizarClave(b).replace(/ /g, '');
   if (!x || !y) return false;
   return x === y || x.includes(y) || y.includes(x);
 }
@@ -90,7 +91,12 @@ function dividirEn(
   }
   cerrar(true);
   // Entradas del índice sin contenido propio (p. ej. dos marcadores en el mismo sitio) ya se filtraron arriba
-  return capitulos.map((c) => ({ ...c, bloques: conTitulo(c.titulo, c.bloques) }));
+  return capitulos.map((c) => {
+    // Si el contenido ya empieza por el título, se usa el texto real de la página (el del marcador puede venir mal escrito)
+    const primero = c.bloques.find((b) => b.tipo !== 'img');
+    const titulo = primero && primero.tipo === 'h' && titulosSimilares(primero.texto, c.titulo) ? primero.texto : c.titulo;
+    return { ...c, titulo, bloques: conTitulo(titulo, c.bloques) };
+  });
 }
 
 function porTitulos(bloques: Bloque[], tituloInicio: string): Capitulo[] | null {

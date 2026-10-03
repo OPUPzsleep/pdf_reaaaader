@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './ErrorBoundary';
 import { CATEGORIAS } from '../tools/categorias';
 import { HERRAMIENTAS } from '../tools/registry';
 import { SearchBox } from '../components/SearchBox';
@@ -6,6 +7,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { Logo } from '../components/Logo';
 
 export function Layout() {
+  const { pathname } = useLocation();
   return (
     <div className="app">
       <header className="topbar">
@@ -41,7 +43,9 @@ export function Layout() {
           ))}
         </nav>
         <main className="principal">
-          <Outlet />
+          <ErrorBoundary key={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

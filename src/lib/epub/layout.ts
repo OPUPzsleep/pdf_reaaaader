@@ -114,9 +114,10 @@ export interface Canal {
  * tienen un hueco ancho en el mismo sitio, ahí hay dos columnas. Funciona también en páginas mixtas
  * (títulos y párrafos a ancho completo junto con texto en columnas).
  */
-export function detectarCanal(grupos: Grupo[], anchoPagina: number): Canal | null {
+export function detectarCanal(grupos: Grupo[], anchoPagina: number, previo: Canal | null = null): Canal | null {
   const huecoMin = Math.max(9, anchoPagina * 0.022);
   const intervalos: Canal[] = [];
+  const relajados: Canal[] = []; // con un lado estrecho: solo valen para heredar el canal de la página anterior
   let lineasConTexto = 0;
   for (const g of grupos) {
     const fr = g.frags.filter((f) => f.texto.trim().length > 0).sort((a, b) => a.x - b.x);
@@ -130,11 +131,20 @@ export function detectarCanal(grupos: Grupo[], anchoPagina: number): Canal | nul
         const ladoIzq = finPrevio - Math.min(...fr.slice(0, i).map((f) => f.x));
         const ladoDer = Math.max(...fr.slice(i).map((f) => f.x + f.ancho)) - fr[i].x;
         if (ladoIzq >= anchoPagina * 0.1 && ladoDer >= anchoPagina * 0.1) intervalos.push({ a: finPrevio, b: fr[i].x });
+        if (ladoIzq >= anchoPagina * 0.04 && ladoDer >= anchoPagina * 0.04) relajados.push({ a: finPrevio, b: fr[i].x });
       }
       finPrevio = Math.max(finPrevio, fr[i].x + fr[i].ancho);
     }
   }
-  if (intervalos.length < 5 || intervalos.length < lineasConTexto * 0.2) return null;
+  if (intervalos.length < 5 || intervalos.length < lineasConTexto * 0.2) {
+    // Páginas con pocas líneas en columnas (final de un capítulo que sigue en dos columnas): se hereda el canal de la anterior
+    if (previo) {
+      const centro = (previo.a + previo.b) / 2;
+      const casan = relajados.filter((t) => t.a <= centro + 2 && t.b >= centro - 2).length;
+      if (casan >= 2 && casan >= relajados.length * 0.8) return previo;
+    }
+    return null;
+  }
 
   // Zona más repetida: barrido sobre los extremos de los intervalos
   const eventos: { x: number; d: number }[] = [];
@@ -168,9 +178,9 @@ export function detectarCanal(grupos: Grupo[], anchoPagina: number): Canal | nul
 }
 
 /** Líneas de una página en orden de lectura, teniendo en cuenta dos columnas y títulos a ancho completo. */
-export function lineasDePagina(pagina: PaginaExtraida, imagenes: RecuadroImagen[]): { lineas: Linea[]; canal: Canal | null } {
+export function lineasDePagina(pagina: PaginaExtraida, imagenes: RecuadroImagen[], canalPrevio: Canal | null = null): { lineas: Linea[]; canal: Canal | null } {
   const grupos = agruparPorY(pagina.fragmentos);
-  const canal = detectarCanal(grupos, pagina.ancho);
+  const canal = detectarCanal(grupos, pagina.ancho, canalPrevio);
   const lineas: Linea[] = [];
   for (const g of grupos) {
     if (!canal) {
@@ -259,12 +269,18 @@ function senalesDeParrafo(paginas: Linea[][], cuerpo: number, interlineado: numb
   let total = 0;
   for (const lineas of paginas) {
     const m = margenesDe(lineas, cuerpo);
+    const porColumna: Record<string, Margenes> = {};
+    for (const col of ['I', 'D']) {
+      const g = lineas.filter((l) => l.columna === col);
+      if (g.length >= 3) porColumna[col] = margenesDe(g, cuerpo);
+    }
     for (let i = 0; i < lineas.length; i++) {
       const l = lineas[i];
       if (l.imagen || Math.abs(l.tam - cuerpo) > 0.6) continue;
-      if (l.columna === 'U' || l.columna === 'C') {
+      const mc = porColumna[l.columna] ?? m;
+      if (l.columna !== 'C') {
         total++;
-        if (l.x1 >= m.der - (m.der - m.izq) * 0.03) llenas++;
+        if (l.x1 >= mc.der - (mc.der - mc.izq) * 0.03) llenas++;
       }
       if (l.x0 - m.izq > l.tam * 0.75 && !marcadorDeLista(l.texto) && l.columna !== 'C') sangrias++;
       const a = lineas[i - 1];
@@ -424,9 +440,11 @@ interface ContextoDocumento {
 function esNuevoParrafo(ant: Linea | null, l: Linea, m: Margenes, ctx: ContextoDocumento): boolean {
   if (!ant) return true;
   if (ant.imagen) return true;
-  if (ant.columna !== l.columna) return true;
   const dy = ant.y - l.y;
   const mayor = Math.max(ant.tam, l.tam);
+  // Un título a ancho completo que se parte en dos líneas: la segunda, más corta, cae en la columna izquierda
+  const sigueTitulo = ant.columna === 'C' && l.columna === 'I' && Math.abs(ant.tam - l.tam) < 0.5 && l.tam >= ctx.cuerpo * 1.12 && dy > 0 && dy <= l.tam * 1.7;
+  if (ant.columna !== l.columna && !sigueTitulo) return true;
   if (Math.abs(l.tam - ant.tam) > 0.7 && mayor >= ctx.cuerpo * 1.1) return true;
   if (dy > mayor * (ctx.interlineado + 0.5)) return true;
   if (marcadorDeLista(l.texto)) return true;
@@ -434,9 +452,11 @@ function esNuevoParrafo(ant: Linea | null, l: Linea, m: Margenes, ctx: ContextoD
   const sangriaL = l.x0 - m.izq > l.tam * 0.75;
   const sangriaA = ant.x0 - m.izq > ant.tam * 0.75;
   if (sangriaL && !sangriaA) return true;
+  const ancho = m.der - m.izq;
+  // En texto justificado todas las líneas llegan al margen salvo la última del párrafo: una línea corta cierra el párrafo
+  if (ctx.justificado && ancho > 0 && ant.x1 < m.der - ancho * 0.12 && Math.abs(ant.tam - ctx.cuerpo) <= 1) return true;
   // Última pista, solo si el documento no usa espacio ni sangría: línea corta que acaba la frase.
   // (En texto sin justificar muchas líneas acaban en punto sin que acabe el párrafo.)
-  const ancho = m.der - m.izq;
   if (!ctx.usaEspaciado && !ctx.usaSangria && ancho > 0 && ant.x1 < m.der - ancho * 0.25 && terminaFrase(ant.texto) && empiezaMayuscula(l.texto)) return true;
   return false;
 }
@@ -567,7 +587,12 @@ export interface OpcionesAnalisis {
 
 export function analizarDocumento(paginas: PaginaExtraida[], opciones: OpcionesAnalisis): DocumentoAnalizado {
   const imagenesElegidas = opciones.incluirImagenes ? seleccionarImagenes(paginas) : paginas.map(() => []);
-  const resultado = paginas.map((p, i) => lineasDePagina(p, imagenesElegidas[i]));
+  let canalPrevio: Canal | null = null;
+  const resultado = paginas.map((p, i) => {
+    const r = lineasDePagina(p, imagenesElegidas[i], canalPrevio);
+    canalPrevio = r.canal;
+    return r;
+  });
   const lineasPorPagina = resultado.map((r) => r.lineas);
 
   const cabecerasQuitadas = opciones.quitarCabeceras ? quitarCabeceras(paginas, lineasPorPagina, tamanoCuerpo(lineasPorPagina)) : 0;

@@ -5,13 +5,20 @@ import path from 'node:path';
 import JSZip from 'jszip';
 import sharp from 'sharp';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream, decodePDFRawStream } from 'pdf-lib';
-import { comprimirPdf, estadoBinarios, localizarGhostscript, localizarLibreOffice, officeAPdf, pdfAOffice, pdfAPdfA, type RutasExternas } from '../electron/lib/externos';
+import { comprimirPdf, estadoBinarios, urlDePerfil, localizarGhostscript, localizarLibreOffice, officeAPdf, pdfAOffice, pdfAPdfA, type RutasExternas } from '../electron/lib/externos';
 import { crearOffice, hayGhostscript } from './util/office';
 import { hayLibreOffice } from './util/libro';
 import { crearPdf, textosPorPagina } from './util/pdfs';
 
 const rutas: RutasExternas = { recursos: path.join(os.tmpdir(), 'no-existe-recursos') };
 const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'perfil-lo-'));
+
+describe('perfil de LibreOffice', () => {
+  it('codifica espacios y acentos en la URL', () => {
+    expect(urlDePerfil('C:\\Users\\José Pérez\\AppData\\Roaming\\pdfreaaaader\\perfil', true)).toBe('file:///C:/Users/Jos%C3%A9%20P%C3%A9rez/AppData/Roaming/pdfreaaaader/perfil');
+    expect(urlDePerfil('/tmp/mi perfil', false)).toBe('file:///tmp/mi%20perfil');
+  });
+});
 
 describe('localización de binarios', () => {
   it('informa de lo que hay en el sistema', () => {

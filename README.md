@@ -18,10 +18,10 @@ Electron + Vite + React + TypeScript. Tema claro y oscuro (se recuerda la elecci
 | | Ampliar | Real-ESRGAN ncnn-vulkan (×2, ×3, ×4) |
 | | Eliminar fondo | ISNet (`onnxruntime-node`) → PNG transparente |
 | **Convertir a PDF** | JPG a PDF | `pdf-lib` (orientación, tamaño, márgenes, EXIF) |
-| | Word / PowerPoint / Excel a PDF | LibreOffice sin interfaz |
+| | Word / PowerPoint / Excel a PDF | **motores propios** (`.docx`, `.pptx`, `.xlsx`, CSV → HTML) + Chromium de Electron imprime el PDF |
 | | HTML a PDF | ventana oculta de Electron + `printToPDF` (URL, archivo o código pegado) |
 | **Convertir desde PDF** | PDF a JPG | `pdf.js` → canvas (DPI configurable, JPG o PNG) → ZIP |
-| | PDF a Word / PowerPoint | LibreOffice (filtros de importación de PDF) |
+| | PDF a Word / PowerPoint | **motores propios**: maquetación del PDF → escritores de `.docx` y `.pptx` |
 | | PDF a Excel | **extracción de tablas propia** (ver más abajo) |
 | | PDF a PDF/A | Ghostscript (PDF/A-2b con perfil sRGB) |
 | | **PDF a EPUB** | motor propio en JavaScript (ver más abajo) |
@@ -54,12 +54,45 @@ cabecera, pie, columnas, listas e imagen), el modo de diseño fijo, un PDF escan
 - En texto sin justificar y sin sangría, un párrafo que continúa en la página siguiente puede quedar partido si la página acaba justo al final de una frase.
 - El OCR comete errores y es lento (unos segundos por página).
 
+## Word, Excel y PowerPoint a PDF
+
+Sin LibreOffice ni Office: cada documento se lee por código (`src/lib/office/`) y se convierte en un HTML autocontenido con las reglas de página en CSS
+(`@page`); Chromium, que ya viene con Electron, lo imprime a PDF.
+
+| Formato | Qué se conserva |
+|---|---|
+| **Word** (`.docx`, `.docm`, `.dotx`) | estilos con herencia (`basedOn`, valores por defecto), formato de texto, listas con niveles y reinicios, tablas (celdas combinadas, bordes, sombreado, estilos de tabla con filas alternas), imágenes (con recorte), tabuladores con puntos de relleno, secciones con página apaisada o columnas, encabezados y pies con número de página, notas al pie, enlaces |
+| **Excel** (`.xlsx`, `.xlsm`, CSV) | formatos de número, fecha y moneda (`#,##0.00 "€"`, `dd/mm/yyyy`, `0,0%`, colores `[Red]`), estilos de celda, celdas combinadas, anchos y alturas, filas/columnas ocultas, área de impresión y repetición de títulos; las hojas muy anchas se reparten en bandas de columnas |
+| **PowerPoint** (`.pptx`, `.ppsx`) | una página por diapositiva con el tamaño de la presentación: textos con herencia del patrón (viñetas, numeración, tamaños), formas (rectángulos, elipses, flechas, formas libres) en SVG con relleno, degradado y contorno, imágenes con recorte, tablas con estilo, grupos, fondos |
+
+El HTML intermedio no puede cargar nada de fuera (política de contenido `default-src 'none'`), no lleva scripts y escapa todo el texto del documento.
+
+### Límites conocidos
+- No se leen los formatos antiguos (`.doc`, `.xls`, `.ppt`), RTF ni OpenDocument: la app explica cómo guardarlos como `.docx`, `.xlsx` o `.pptx`.
+- Los **gráficos** (Excel, Word, PowerPoint) y los objetos SmartArt se sustituyen por un recuadro y se avisa; las imágenes EMF/WMF no se pueden mostrar.
+- Las **fórmulas** de Excel se muestran con el último valor calculado que guardó Excel; un libro creado por una librería sin valores guardados saldrá con esas celdas vacías.
+- La paginación puede diferir de la de Word en algún salto de página, y las fuentes que no estén instaladas se sustituyen por otras parecidas.
+
+## PDF a Word y PDF a PowerPoint
+
+También por código y sin programas externos:
+
+- **PDF a Word** reutiliza la maquetación de PDF a EPUB (párrafos, títulos, listas, columnas, imágenes, OCR opcional) y añade la **detección de tablas** (la misma de PDF a Excel):
+  escribe un `.docx` con estilos de título, negrita y cursiva, listas numeradas que reinician, tablas con cabecera repetida e imágenes. El texto fluye como en cualquier documento de Word.
+- **PDF a PowerPoint** genera una diapositiva por página con el **fondo original sin el texto** (se dibuja la página omitiendo las operaciones de texto) y, encima, **cuadros de texto
+  editables** con el tamaño, la negrita, la cursiva, la fuente y el **color** reales (el color se averigua comparando la página con y sin texto). Con «Solo imágenes» cada
+  diapositiva es la página entera como imagen.
+
+![PDF a PowerPoint](docs/capturas/pdf-a-powerpoint.png)
+
+Los `.docx` y `.pptx` generados se validan en las pruebas abriéndolos con LibreOffice (si está instalado en la máquina de desarrollo) y volviéndolos a leer con los motores de arriba.
+
 ## PDF a Excel
 
-LibreOffice no tiene filtro de importación de PDF en Calc, así que la herramienta usa un extractor propio (`src/lib/tablas/`): agrupa el texto en filas, detecta bloques
+La herramienta usa un extractor propio (`src/lib/tablas/`): agrupa el texto en filas, detecta bloques
 con celdas alineadas en columnas, une las tablas que continúan en la página siguiente (omitiendo la cabecera repetida), reconoce celdas combinadas y convierte los números
 (`1.234,50`, `12 %`, `(300)`) en números de Excel. Genera cada tabla en su hoja y, opcionalmente, el resto del texto en una hoja «Texto». El `.xlsx` se escribe a mano y se
-comprueba abriéndolo con LibreOffice.
+comprueba en las pruebas abriéndolo con LibreOffice (si está instalado).
 
 ## Desarrollo
 
@@ -69,7 +102,7 @@ Requisitos: Node 22 o superior.
 npm install
 npm run dev          # Vite + Electron con recarga
 npm run typecheck
-npm test             # vitest: lib/pdf, lib/epub, lib/tablas, sharp, Ghostscript, LibreOffice, OCR, IA
+npm test             # vitest: lib/pdf, lib/epub, lib/office, lib/tablas, sharp, Ghostscript, OCR, IA
 npm run build        # interfaz + proceso principal
 npx playwright test  # pruebas de extremo a extremo con Electron (en Linux: xvfb-run -a npx playwright test)
 ```
@@ -81,16 +114,16 @@ El renderer **no usa `file://`**: la versión empaquetada se sirve por un esquem
 
 ```powershell
 npm install
-npm run fetch-binaries   # descarga LibreOffice, Ghostscript, Real-ESRGAN y el modelo a .\resources (≈ 700 MB)
+npm run fetch-binaries   # descarga Ghostscript, Real-ESRGAN y el modelo a .\resources (≈ 300 MB)
 npm run dist             # release\pdfreaaaader-Setup-<versión>.exe y release\pdfreaaaader-Portable-<versión>.exe
 ```
 
 `npm run fetch-binaries -- -Solo modelo,realesrgan` descarga solo una parte. Si no los descargas, la app funciona igual y cada herramienta
-que dependa de un programa que falte lo avisa en pantalla (también detecta LibreOffice instalado en `C:\Program Files`, `gs`/`soffice` en el `PATH` y las variables
-`PDFREAAAADER_GS`, `PDFREAAAADER_SOFFICE`, `PDFREAAAADER_MODELO_FONDO`). `npm run dist:dir` genera solo la carpeta sin instalador (más rápido para probar).
+que dependa de un programa que falte lo avisa en pantalla (también detecta Ghostscript instalado en `C:\Program Files`, `gs` en el `PATH` y las variables
+`PDFREAAAADER_GS`, `PDFREAAAADER_MODELO_FONDO`). `npm run dist:dir` genera solo la carpeta sin instalador (más rápido para probar).
 
-Tamaño estimado del instalador: **700 MB – 1 GB** (LibreOffice ≈ 400 MB, modelo ≈ 170 MB, Electron ≈ 100 MB, Ghostscript ≈ 40 MB). Si es demasiado, lo más fácil
-es quitar `libreoffice` de `resources` y dejar que la app use el LibreOffice instalado, o pasar LibreOffice y el modelo a una descarga en el primer uso.
+Tamaño del instalador: **≈ 420 MB** (modelo ≈ 170 MB, Electron ≈ 100 MB, Ghostscript ≈ 65 MB, Real-ESRGAN ≈ 50 MB). Word, Excel y PowerPoint no añaden nada: usan el Chromium de Electron.
+Si es demasiado, el modelo de «Eliminar fondo» y Real-ESRGAN se pueden pasar a una descarga en el primer uso.
 
 Si `npm run dist` falla con «Cannot create symbolic link» (al extraer winCodeSign), abre PowerShell como administrador o activa el **Modo desarrollador** de Windows
 (Configuración → Privacidad y seguridad → Para programadores); es un requisito de electron-builder, no de la app.
@@ -100,13 +133,14 @@ El repositorio incluye un flujo de GitHub Actions (`.github/workflows/windows.ym
 ## Estructura
 
 ```
-electron/         main.ts, preload.ts, ipc/ (archivos, imagen, html, externos, ia), lib/ (sharp, Ghostscript, LibreOffice, IA)
+electron/         main.ts, preload.ts, ipc/ (archivos, imagen, html, externos, ia), lib/ (sharp, Ghostscript, IA)
 src/
   app/            App, Layout, tema
   pages/          Home, ToolPage
   tools/          registry.ts (una entrada por herramienta) + una carpeta por herramienta + comun/ (vistas compartidas)
   lib/pdf/        unir, dividir, rotar, números, imágenes a PDF, rangos, zip
-  lib/epub/       extraer, layout, capítulos, xhtml, ensamblar, ocr, renderNavegador
+  lib/epub/       extraer, layout, capítulos, xhtml, ensamblar, ocr, renderNavegador, lectura (compartida con Word/PowerPoint)
+  lib/office/     xml, docx/xlsx/pptx → HTML, escritores de .docx y .pptx, PDF → Word/PowerPoint
   lib/tablas/     detectar, números, xlsx
   components/     FileDropzone, Miniatura, ListaOrdenable, CuadriculaOrdenable, SelectorPaginas, ResultadoPanel…
 scripts/          build-electron.mjs, dev.mjs, copiar-recursos.mjs, generar-iconos.mjs, fetch-binaries.ps1
@@ -116,8 +150,14 @@ resources/        programas externos (no se versiona)
 
 Añadir una herramienta es una entrada en `src/tools/registry.ts` (id, categoría, nombre, descripción, icono y componente); de ahí salen la home, el menú lateral y el buscador.
 
+## Pruebas con archivos de Office
+
+`tests/fixtures/office/` guarda un `.docx`, un `.xlsx` y un `.pptx` creados con `python-docx`, `openpyxl` y `python-pptx` (`python3 tests/fixtures/generar-office.py` los regenera): son documentos
+escritos por programas ajenos a esta app, así que sirven de entrada real. Algunas pruebas usan LibreOffice si está instalado, solo como generador de PDF de ejemplo y para
+comprobar que los `.docx`/`.pptx` generados se abren; la app no lo necesita.
+
 ## Licencias
 
 - **Ghostscript** es AGPL. Para uso personal no hay problema; si algún día distribuyes la app, revisa esa licencia (o sustituye la compresión por otra herramienta).
-- **LibreOffice** (MPL 2.0), **Real-ESRGAN** (BSD-3) y **tesseract.js** (Apache-2.0) son compatibles con la redistribución. Revisa la licencia del modelo **ISNet** antes de distribuir.
+- **Real-ESRGAN** (BSD-3) y **tesseract.js** (Apache-2.0) son compatibles con la redistribución. Revisa la licencia del modelo **ISNet** antes de distribuir.
 - Los iconos son propios (SVG con `lucide-react`); no se usa ningún recurso gráfico de iLovePDF.

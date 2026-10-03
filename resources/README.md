@@ -5,11 +5,12 @@ Programas externos que usa la app. Esta carpeta **no se versiona** (solo este ar
 
 | Carpeta | Contenido | Herramientas |
 |---|---|---|
-| `libreoffice/` | LibreOffice (instalación administrativa del MSI) | Word/Excel/PowerPoint a PDF, PDF a Word/PowerPoint |
 | `ghostscript/` | Ghostscript (`bin\gswin64c.exe`) | Comprimir PDF, PDF a PDF/A |
 | `realesrgan/` | `realesrgan-ncnn-vulkan.exe` y `models\` | Ampliar |
 | `models/` | `isnet-general-use.onnx` | Eliminar fondo |
 
 Si algo falta, la herramienta correspondiente lo avisa en pantalla. También se usan, si existen en el sistema:
-LibreOffice instalado (`C:\Program Files\LibreOffice`), `gs`/`soffice` en el `PATH`, o las variables de entorno
-`PDFREAAAADER_GS`, `PDFREAAAADER_SOFFICE` y `PDFREAAAADER_MODELO_FONDO`.
+Ghostscript instalado (`C:\Program Files\gs`), `gs` en el `PATH`, o las variables de entorno
+`PDFREAAAADER_GS` y `PDFREAAAADER_MODELO_FONDO`.
+
+Word, Excel y PowerPoint (a y desde PDF) no usan ningún programa externo: están implementados en la propia aplicación.

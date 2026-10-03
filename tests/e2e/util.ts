@@ -1,11 +1,11 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 import path from 'node:path';
 
-export async function abrirApp(): Promise<{ app: ElectronApplication; page: Page }> {
+export async function abrirApp(env: Record<string, string> = {}): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
     args: ['.', '--no-sandbox', '--disable-gpu', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
     cwd: path.resolve(process.cwd()),
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', ...env },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');

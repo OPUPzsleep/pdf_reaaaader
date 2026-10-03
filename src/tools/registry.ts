@@ -105,6 +105,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Comprimir PDF',
     descripcion: 'Reduce el tamaño del PDF con perfiles de calidad baja, media o alta.',
     icono: Minimize2,
+    componente: lazy(() => import('./comprimir-pdf')),
     claves: ['reducir', 'ghostscript', 'peso'],
   },
   {
@@ -122,6 +123,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Ampliar',
     descripcion: 'Aumenta la resolución de una imagen x2, x3 o x4 con IA (Real-ESRGAN).',
     icono: Maximize2,
+    componente: lazy(() => import('./ampliar')),
     claves: ['agrandar', 'upscale', 'ia', 'resolucion'],
   },
   {
@@ -130,6 +132,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Eliminar fondo',
     descripcion: 'Quita el fondo de una imagen con IA y exporta PNG transparente.',
     icono: Eraser,
+    componente: lazy(() => import('./eliminar-fondo')),
     claves: ['recortar fondo', 'transparente', 'ia'],
   },
 
@@ -149,6 +152,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Word a PDF',
     descripcion: 'Convierte documentos DOC y DOCX a PDF.',
     icono: FileText,
+    componente: lazy(() => import('./word-a-pdf')),
     claves: ['doc', 'docx', 'libreoffice'],
   },
   {
@@ -157,6 +161,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'PowerPoint a PDF',
     descripcion: 'Convierte presentaciones PPT y PPTX a PDF.',
     icono: Presentation,
+    componente: lazy(() => import('./powerpoint-a-pdf')),
     claves: ['ppt', 'pptx', 'diapositivas', 'libreoffice'],
   },
   {
@@ -165,6 +170,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Excel a PDF',
     descripcion: 'Convierte hojas de cálculo XLS y XLSX a PDF.',
     icono: FileSpreadsheet,
+    componente: lazy(() => import('./excel-a-pdf')),
     claves: ['xls', 'xlsx', 'hoja', 'libreoffice'],
   },
   {
@@ -193,6 +199,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'PDF a Word',
     descripcion: 'Convierte un PDF en un documento Word editable (DOCX).',
     icono: FileText,
+    componente: lazy(() => import('./pdf-a-word')),
     claves: ['docx', 'editar', 'libreoffice'],
   },
   {
@@ -201,15 +208,17 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'PDF a PowerPoint',
     descripcion: 'Convierte un PDF en una presentación PPTX.',
     icono: Presentation,
+    componente: lazy(() => import('./pdf-a-powerpoint')),
     claves: ['pptx', 'diapositivas', 'libreoffice'],
   },
   {
     id: 'pdf-a-excel',
     categoria: 'desde-pdf',
     nombre: 'PDF a Excel',
-    descripcion: 'Convierte un PDF con tablas en una hoja de cálculo XLSX.',
+    descripcion: 'Extrae las tablas de un PDF y las guarda en una hoja de cálculo XLSX.',
     icono: FileSpreadsheet,
-    claves: ['xlsx', 'tablas', 'libreoffice'],
+    componente: lazy(() => import('./pdf-a-excel')),
+    claves: ['xlsx', 'tablas', 'hoja de calculo'],
   },
   {
     id: 'pdf-a-pdfa',
@@ -217,6 +226,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'PDF a PDF/A',
     descripcion: 'Convierte un PDF al formato de archivo a largo plazo PDF/A-2.',
     icono: FileCheck2,
+    componente: lazy(() => import('./pdf-a-pdfa')),
     claves: ['archivo', 'ghostscript', 'preservacion'],
   },
   {

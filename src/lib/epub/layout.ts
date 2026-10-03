@@ -40,7 +40,7 @@ export interface Grupo {
 }
 
 /** Agrupa fragmentos que comparten línea base (con tolerancia para superíndices y subíndices). */
-function agruparPorY(frags: Fragmento[]): Grupo[] {
+export function agruparPorY(frags: Fragmento[]): Grupo[] {
   const ordenados = frags.filter((f) => f.texto.length > 0).sort((a, b) => b.y - a.y || a.x - b.x);
   const grupos: Grupo[] = [];
   for (const f of ordenados) {

@@ -24,7 +24,7 @@ const api: PdfreaaaaderApi = {
   },
   ia: {
     quitarFondo: (id, datos) => ipcRenderer.invoke('ia:quitar-fondo', id, datos),
-    ampliar: (id, datos, escala) => ipcRenderer.invoke('ia:ampliar', id, datos, escala),
+    ampliar: (id, datos, escala, tipo) => ipcRenderer.invoke('ia:ampliar', id, datos, escala, tipo),
   },
   alProgreso(cb) {
     const handler = (_: unknown, e: ProgresoEvento) => cb(e);

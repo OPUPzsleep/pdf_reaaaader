@@ -149,36 +149,58 @@ if (Quiere 'libreoffice') {
   if ((Buscar $dest 'soffice.exe') -and -not $Forzar) {
     Write-Host '  ya está en resources\libreoffice'
   } else {
-    # Versiones publicadas en «stable», de la más nueva a la más antigua. La más nueva a veces aún no tiene MSI para Windows,
-    # así que se prueba cada una con una petición HEAD hasta encontrar la primera que existe.
-    $versiones = @()
-    try {
-      $indice = Invoke-WebRequest 'https://download.documentfoundation.org/libreoffice/stable/' -UseBasicParsing
-      $versiones = @($indice.Links |
-        Where-Object { $_.href -match '^\d+\.\d+\.\d+/?$' } |
-        ForEach-Object { $_.href.TrimEnd('/') } |
-        Sort-Object { [version]$_ } -Descending |
-        Select-Object -First 6)
-    } catch {
-      Write-Host '  (no se pudo consultar las versiones de LibreOffice)'
+    # El MSI puede venir de varios sitios; se prueba cada candidata con una peticion HEAD hasta encontrar la primera que existe.
+    # Orden: URL indicada por el usuario, versiones publicadas en «stable» (la mas nueva a veces aun no tiene MSI para Windows),
+    # versiones conocidas en el servidor principal y en el archivo historico.
+    function Probar([string]$candidata) {
+      for ($i = 1; $i -le 2; $i++) {
+        try {
+          Invoke-WebRequest -Uri $candidata -Method Head -UseBasicParsing -TimeoutSec 60 -Headers @{ 'User-Agent' = 'pdfreaaaader' } | Out-Null
+          return $true
+        } catch {
+          $msg = ($_.Exception.Message -split "`n")[0]
+          $noExiste = $_.Exception.Response -and ([int]$_.Exception.Response.StatusCode -eq 404)
+          if ($noExiste -or $i -eq 2) { Write-Host "  no disponible: $candidata ($msg)" }
+          if ($noExiste) { return $false }
+          Start-Sleep -Seconds 2
+        }
+      }
+      return $false
     }
-    $url = $null
-    foreach ($v in $versiones) {
-      $nombre = "LibreOffice_${v}_Win_x86-64.msi"
-      $candidata = "https://download.documentfoundation.org/libreoffice/stable/$v/win/x86_64/$nombre"
-      try {
-        Invoke-WebRequest -Uri $candidata -Method Head -UseBasicParsing | Out-Null
-        $url = $candidata
-        break
-      } catch {
-        Write-Host "  $v no tiene instalador para Windows, se prueba la anterior"
+    $candidatas = New-Object System.Collections.Generic.List[object]
+    if ($env:PDFREAAAADER_LIBREOFFICE_URL) {
+      $candidatas.Add([pscustomobject]@{ Url = $env:PDFREAAAADER_LIBREOFFICE_URL; Nombre = (Split-Path $env:PDFREAAAADER_LIBREOFFICE_URL -Leaf) })
+    }
+    $vistas = @()
+    foreach ($indiceUrl in 'https://download.documentfoundation.org/libreoffice/stable/', 'https://downloadarchive.documentfoundation.org/libreoffice/stable/') {
+      for ($i = 1; $i -le 3 -and -not $vistas; $i++) {
+        try {
+          $indice = Invoke-WebRequest $indiceUrl -UseBasicParsing -TimeoutSec 60 -Headers @{ 'User-Agent' = 'pdfreaaaader' }
+          $vistas = @([regex]::Matches([string]$indice.Content, 'href="(\d+\.\d+\.\d+)/"') | ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object -Unique { [version]$_ } -Descending | Select-Object -First 6)
+          Write-Host "  versiones en ${indiceUrl}: $($vistas -join ', ')"
+        } catch {
+          Write-Host "  no se pudo consultar ${indiceUrl} (intento $i): $(($_.Exception.Message -split "`n")[0])"
+          Start-Sleep -Seconds 3
+        }
       }
     }
-    if (-not $url) {
-      # Última opción: una versión conocida del archivo histórico
-      $nombre = 'LibreOffice_24.8.4_Win_x86-64.msi'
-      $url = "https://downloadarchive.documentfoundation.org/libreoffice/old/24.8.4.2/win/x86_64/$nombre"
+    $conocidas = '26.2.4', '25.8.4', '25.8.2', '24.8.7', '24.8.6'
+    foreach ($v in @($vistas) + @($conocidas | Where-Object { $vistas -notcontains $_ })) {
+      $nombreMsi = "LibreOffice_${v}_Win_x86-64.msi"
+      $candidatas.Add([pscustomobject]@{ Url = "https://download.documentfoundation.org/libreoffice/stable/$v/win/x86_64/$nombreMsi"; Nombre = $nombreMsi })
     }
+    foreach ($v in $conocidas) {
+      $nombreMsi = "LibreOffice_${v}_Win_x86-64.msi"
+      foreach ($r in 1, 2, 3) {
+        $candidatas.Add([pscustomobject]@{ Url = "https://downloadarchive.documentfoundation.org/libreoffice/old/$v.$r/win/x86_64/$nombreMsi"; Nombre = $nombreMsi })
+      }
+    }
+    $url = $null
+    foreach ($c in $candidatas) {
+      if (Probar $c.Url) { $url = $c.Url; $nombre = $c.Nombre; break }
+    }
+    if (-not $url) { throw 'No se encontro ningun instalador MSI de LibreOffice. Descargalo a mano y ejecuta con $env:PDFREAAAADER_LIBREOFFICE_URL = <direccion del MSI>.' }
     $msi = Join-Path $tmp $nombre
     Descargar $url $msi
     if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }

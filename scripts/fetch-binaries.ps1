@@ -83,8 +83,16 @@ if (Quiere 'ghostscript') {
     $instalador = Join-Path $tmp $nombre
     Descargar $url $instalador
     if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-    # Instalación silenciosa (NSIS): /D debe ser el último argumento y sin comillas
-    Start-Process -FilePath $instalador -ArgumentList '/S', "/D=$dest" -Wait | Out-Null
+    # Instalación silenciosa (NSIS): /D debe ser el último argumento y sin comillas.
+    # No se usa «Start-Process -Wait»: espera también a los procesos hijos del instalador y puede quedarse colgado.
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    $p = Start-Process -FilePath $instalador -ArgumentList '/S', "/D=$dest" -PassThru
+    $limite = (Get-Date).AddMinutes(8)
+    while ((Get-Date) -lt $limite -and -not (Buscar $dest 'gswin64c.exe')) { Start-Sleep -Seconds 3 }
+    if (-not $p.WaitForExit(30000)) {
+      Write-Host '  el instalador sigue abierto; se cierra (los archivos ya están copiados)'
+      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    }
     if (-not (Buscar $dest 'gswin64c.exe')) { throw 'La instalación de Ghostscript no creó gswin64c.exe en resources\ghostscript.' }
     Write-Host "  listo ($(Tamano $dest))"
   }

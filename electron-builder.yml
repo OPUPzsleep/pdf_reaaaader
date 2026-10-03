@@ -24,7 +24,7 @@ asarUnpack:
   - "**/node_modules/@img/**"
   - "**/node_modules/onnxruntime-node/**"
 
-# LibreOffice, Ghostscript, Real-ESRGAN y los modelos van fuera del asar, en la carpeta resources de la app.
+# Ghostscript, Real-ESRGAN y los modelos van fuera del asar, en la carpeta resources de la app.
 # Se descargan con «npm run fetch-binaries» (scripts/fetch-binaries.ps1).
 extraResources:
   - from: resources

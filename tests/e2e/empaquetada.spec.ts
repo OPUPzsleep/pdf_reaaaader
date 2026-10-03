@@ -123,21 +123,3 @@ test('empaquetada: Ghostscript incluido comprime un PDF', async () => {
   expect(fs.statSync(salida).size).toBeLessThan(fs.statSync(origen).size * 0.7);
   await app.close();
 });
-
-test('empaquetada: LibreOffice incluido convierte un RTF a PDF', async () => {
-  test.skip(!fs.existsSync(path.resolve('resources/libreoffice')), 'falta LibreOffice en resources/libreoffice');
-  test.setTimeout(240_000);
-  const { app, page } = await abrirApp();
-  const rtf = '{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Arial;}}\\f0\\fs28 Hola desde LibreOffice dentro de pdfreaaaader.\\par Segunda linea de prueba.\\par}';
-  const origen = path.join(dir, 'prueba.rtf');
-  fs.writeFileSync(origen, rtf);
-  const salida = path.join(dir, 'prueba.pdf');
-  await simularGuardado(app, [salida]);
-  await irA(page, 'word-a-pdf');
-  await expect(page.getByTestId('falta-binario')).toHaveCount(0);
-  await subir(page, origen);
-  await page.getByTestId('accion').click();
-  await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 200_000 });
-  expect((await textosPorPagina(leer(salida)))[0]).toContain('Hola desde LibreOffice');
-  await app.close();
-});

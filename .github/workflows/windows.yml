@@ -27,7 +27,7 @@ jobs:
           npm run typecheck
           npm test
 
-      # Los instaladores descargados se guardan en caché: los espejos de LibreOffice a veces son lentos o cortan la conexión
+      # Los instaladores descargados se guardan en caché para no repetir la descarga en cada ejecución
       - name: Carpeta de descargas
         shell: pwsh
         run: '"PDFREAAAADER_DESCARGAS=$env:RUNNER_TEMP\descargas" >> $env:GITHUB_ENV'
@@ -51,10 +51,6 @@ jobs:
       - name: Descargar Ghostscript
         timeout-minutes: 10
         run: npm run fetch-binaries -- -Solo ghostscript
-
-      - name: Descargar LibreOffice
-        timeout-minutes: 25
-        run: npm run fetch-binaries -- -Solo libreoffice
 
       - name: Guardar descargas en caché
         if: steps.cache-descargas.outputs.cache-hit != 'true'

@@ -32,3 +32,9 @@ export const MIME = {
 export async function leerArchivo(f: File): Promise<Uint8Array> {
   return new Uint8Array(await f.arrayBuffer());
 }
+
+/** Las herramientas que usan el proceso principal (sharp, Ghostscript…) solo existen en la app de escritorio. */
+export function requerirApi() {
+  if (!window.api) throw new Error('Esta herramienta solo funciona en la aplicación de escritorio.');
+  return window.api;
+}

@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export async function abrirApp(): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
-    args: ['.', '--no-sandbox', '--disable-gpu'],
+    args: ['.', '--no-sandbox', '--disable-gpu', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
     cwd: path.resolve(process.cwd()),
     env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
   });

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, net, protocol, session, shell } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { registrarArchivos } from './ipc/files';
@@ -92,6 +92,12 @@ if (!app.requestSingleInstanceLock()) {
         : null,
     );
     if (!esDev) servirApp();
+    // Permisos: solo la cámara (Escanea a PDF) y solo para la propia app.
+    session.defaultSession.setPermissionRequestHandler((wc, permiso, callback) => {
+      const origen = wc.getURL();
+      callback(permiso === 'media' && (origen.startsWith(ORIGEN_APP) || (!!urlDev && origen.startsWith(urlDev))));
+    });
+    session.defaultSession.setPermissionCheckHandler((_wc, permiso) => permiso === 'media');
     registrarArchivos();
     registrarImagen();
     registrarHtml();

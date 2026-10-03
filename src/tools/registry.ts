@@ -94,6 +94,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Escanea a PDF',
     descripcion: 'Captura documentos con la cámara o importa fotos y conviértelos en PDF.',
     icono: ScanLine,
+    componente: lazy(() => import('./escanear')),
     claves: ['camara', 'webcam', 'escaner', 'foto'],
   },
 
@@ -112,6 +113,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Comprimir IMAGEN',
     descripcion: 'Reduce el peso de JPG, PNG y WebP con calidad ajustable.',
     icono: ImageDown,
+    componente: lazy(() => import('./comprimir-imagen')),
     claves: ['reducir', 'jpg', 'png', 'webp'],
   },
   {
@@ -171,6 +173,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'HTML a PDF',
     descripcion: 'Convierte una página web, un archivo .html o código pegado a PDF.',
     icono: Code2,
+    componente: lazy(() => import('./html-a-pdf')),
     claves: ['web', 'url', 'pagina'],
   },
 
@@ -252,6 +255,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Redimensionar imagen',
     descripcion: 'Cambia el ancho y el alto en píxeles o en porcentaje.',
     icono: Ruler,
+    componente: lazy(() => import('./redimensionar')),
     claves: ['tamano', 'escalar', 'resize'],
   },
   {
@@ -260,6 +264,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Recortar imagen',
     descripcion: 'Recorta una zona de la imagen con un selector visual.',
     icono: Crop,
+    componente: lazy(() => import('./recortar')),
     claves: ['cortar', 'crop'],
   },
   {
@@ -268,6 +273,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Girar imagen',
     descripcion: 'Rota la imagen 90°, 180° o 270° y voltéala en horizontal o vertical.',
     icono: RefreshCw,
+    componente: lazy(() => import('./girar-imagen')),
     claves: ['rotar', 'voltear', 'espejo'],
   },
 
@@ -278,6 +284,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Convertir a JPG',
     descripcion: 'Convierte PNG, WebP, GIF, BMP, TIFF y SVG a JPG.',
     icono: ImageIcon,
+    componente: lazy(() => import('./convertir-a-jpg')),
     claves: ['png', 'webp', 'gif', 'bmp', 'tiff', 'svg'],
   },
   {
@@ -286,6 +293,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Convertir desde JPG',
     descripcion: 'Convierte JPG a PNG, WebP o GIF.',
     icono: Braces,
+    componente: lazy(() => import('./convertir-desde-jpg')),
     claves: ['png', 'webp', 'gif'],
   },
   {
@@ -294,6 +302,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'HTML a IMAGEN',
     descripcion: 'Captura una página web completa como imagen PNG o JPG.',
     icono: Code2,
+    componente: lazy(() => import('./html-a-imagen')),
     claves: ['captura', 'pantallazo', 'screenshot', 'web'],
   },
 ];

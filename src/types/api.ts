@@ -34,8 +34,12 @@ export type OpImagen =
       tipo: 'redimensionar';
       ancho?: number;
       alto?: number;
-      /** 'contain' mantiene proporción dentro del cuadro; 'fill' deforma; 'inside' no agranda */
-      ajuste: 'contain' | 'fill' | 'inside' | 'cover';
+      /** Si se indica, se ignoran ancho y alto: escala la imagen este porcentaje (10–500) */
+      porcentaje?: number;
+      /** 'inside' conserva proporción dentro del cuadro; 'fill' deforma a la medida exacta */
+      ajuste: 'fill' | 'inside';
+      /** No agrandar imágenes más pequeñas que el cuadro */
+      sinAgrandar?: boolean;
       formato?: FormatoImagen;
       calidad?: number;
     }
@@ -64,8 +68,8 @@ export interface InfoImagen {
 }
 
 export interface SolicitudHtml {
-  /** Una URL (http/https/file) o contenido HTML en bruto */
-  origen: { tipo: 'url'; url: string } | { tipo: 'html'; html: string };
+  /** Una URL http/https, un archivo .html del disco o código HTML pegado */
+  origen: { tipo: 'url'; url: string } | { tipo: 'html'; html: string } | { tipo: 'archivo'; ruta: string };
   /** Solo para PDF */
   pdf?: { tamano: 'A4' | 'Letter' | 'A3' | 'Legal'; horizontal: boolean; margenMm: number; fondos: boolean };
   /** Solo para imagen */

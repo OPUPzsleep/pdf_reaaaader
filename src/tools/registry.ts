@@ -1,6 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
-export { lazy };
 import {
   ArrowDownUp,
   BookOpen,
@@ -50,6 +49,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Unir PDF',
     descripcion: 'Combina varios PDF en un solo archivo, en el orden que elijas.',
     icono: Merge,
+    componente: lazy(() => import('./unir')),
     claves: ['combinar', 'juntar', 'merge'],
   },
   {
@@ -58,6 +58,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Dividir PDF',
     descripcion: 'Separa un PDF por rangos, cada N páginas o una página por archivo.',
     icono: Scissors,
+    componente: lazy(() => import('./dividir')),
     claves: ['separar', 'split', 'cortar'],
   },
   {
@@ -66,6 +67,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Eliminar páginas',
     descripcion: 'Quita las páginas que no necesitas con miniaturas o rangos.',
     icono: Trash2,
+    componente: lazy(() => import('./eliminar-paginas')),
     claves: ['borrar', 'quitar'],
   },
   {
@@ -74,6 +76,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Extraer páginas',
     descripcion: 'Conserva solo las páginas elegidas en un PDF nuevo.',
     icono: FileOutput,
+    componente: lazy(() => import('./extraer-paginas')),
     claves: ['sacar', 'seleccionar'],
   },
   {
@@ -82,6 +85,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Ordenar PDF',
     descripcion: 'Reordena, gira o borra páginas arrastrando las miniaturas.',
     icono: ArrowDownUp,
+    componente: lazy(() => import('./ordenar')),
     claves: ['organizar', 'reordenar', 'arrastrar'],
   },
   {
@@ -134,6 +138,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'JPG a PDF',
     descripcion: 'Convierte imágenes a PDF con orientación, tamaño de página y márgenes.',
     icono: FileImage,
+    componente: lazy(() => import('./jpg-a-pdf')),
     claves: ['imagen', 'png', 'foto'],
   },
   {
@@ -176,6 +181,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'PDF a JPG',
     descripcion: 'Convierte cada página del PDF en una imagen JPG con el DPI que elijas.',
     icono: ImageIcon,
+    componente: lazy(() => import('./pdf-a-jpg')),
     claves: ['imagen', 'exportar paginas'],
   },
   {
@@ -226,6 +232,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Rotar PDF',
     descripcion: 'Gira todas las páginas de uno o varios PDF a la vez.',
     icono: RotateCw,
+    componente: lazy(() => import('./rotar')),
     claves: ['girar', 'voltear'],
   },
   {
@@ -234,6 +241,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'Números de página',
     descripcion: 'Añade numeración con posición, formato, tamaño y rango a tu gusto.',
     icono: Hash,
+    componente: lazy(() => import('./numeros-de-pagina')),
     claves: ['numerar', 'paginar', 'paginacion'],
   },
 

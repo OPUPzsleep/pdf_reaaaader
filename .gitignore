@@ -10,3 +10,4 @@ tests/fixtures/generated/
 .DS_Store
 test-results/
 playwright-report/
+public/pdfjs/

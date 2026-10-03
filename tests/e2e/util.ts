@@ -11,3 +11,29 @@ export async function abrirApp(): Promise<{ app: ElectronApplication; page: Page
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
 }
+
+import fs from 'node:fs';
+import os from 'node:os';
+
+export function carpetaTemporal(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'pdfreaaaader-'));
+}
+
+export async function irA(page: Page, id: string) {
+  await page.evaluate((i) => {
+    location.hash = `#/herramienta/${i}`;
+  }, id);
+  await page.getByTestId('zona-archivos').first().waitFor();
+}
+
+/** Hace que el diálogo "Guardar como" devuelva siempre esta ruta (sin abrir ventana nativa). */
+export async function simularGuardado(app: ElectronApplication, rutas: string[]) {
+  await app.evaluate(({ dialog }, lista) => {
+    const cola = [...lista];
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: cola.shift() ?? cola[0] })) as typeof dialog.showSaveDialog;
+  }, rutas);
+}
+
+export async function subir(page: Page, rutas: string | string[]) {
+  await page.getByTestId('entrada-archivos').first().setInputFiles(rutas);
+}

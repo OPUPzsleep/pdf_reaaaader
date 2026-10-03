@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { registrarArchivos } from './ipc/files';
 import { registrarImagen } from './ipc/image';
 import { registrarHtml } from './ipc/html';
@@ -8,6 +9,25 @@ import { registrarIA } from './ipc/ai';
 
 const urlDev = process.env.VITE_DEV_SERVER_URL;
 const esDev = !!urlDev;
+const ORIGEN_APP = 'app://local';
+
+// La versión empaquetada se sirve por un esquema propio (app://) en vez de file://, para que
+// funcionen fetch, workers y wasm (pdf.js, tesseract.js, onnxruntime) como en un sitio web normal.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+]);
+
+function servirApp() {
+  const raiz = path.join(__dirname, '..', 'dist');
+  protocol.handle('app', (peticion) => {
+    const url = new URL(peticion.url);
+    let ruta = decodeURIComponent(url.pathname);
+    if (ruta === '/' || ruta === '') ruta = '/index.html';
+    const absoluta = path.normalize(path.join(raiz, ruta));
+    if (!absoluta.startsWith(raiz)) return new Response('Prohibido', { status: 403 });
+    return net.fetch(pathToFileURL(absoluta).toString());
+  });
+}
 
 function crearVentana() {
   const win = new BrowserWindow({
@@ -35,7 +55,7 @@ function crearVentana() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    const interno = urlDev ? url.startsWith(urlDev) : url.startsWith('file://');
+    const interno = urlDev ? url.startsWith(urlDev) : url.startsWith(ORIGEN_APP);
     if (!interno) {
       e.preventDefault();
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
@@ -43,7 +63,7 @@ function crearVentana() {
   });
 
   if (urlDev) void win.loadURL(urlDev);
-  else void win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  else void win.loadURL(`${ORIGEN_APP}/index.html`);
   return win;
 }
 
@@ -71,6 +91,7 @@ if (!app.requestSingleInstanceLock()) {
           ])
         : null,
     );
+    if (!esDev) servirApp();
     registrarArchivos();
     registrarImagen();
     registrarHtml();

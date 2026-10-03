@@ -53,6 +53,7 @@ function Descargar([string]$url, [string]$destino) {
 # se espera solo al proceso lanzado.
 function Ejecutar([string]$programa, [string[]]$argumentos, [int]$minutos = 20) {
   $p = Start-Process -FilePath $programa -ArgumentList $argumentos -PassThru -WindowStyle Hidden
+  $null = $p.Handle # sin esto, ExitCode puede quedar vacío
   if (-not $p.WaitForExit($minutos * 60 * 1000)) {
     Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
     throw "$programa tardó más de $minutos minutos y se canceló."

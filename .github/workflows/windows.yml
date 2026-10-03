@@ -38,12 +38,10 @@ jobs:
 
       - name: Descargar Ghostscript
         timeout-minutes: 10
-        continue-on-error: true
         run: npm run fetch-binaries -- -Solo ghostscript
 
       - name: Descargar LibreOffice
         timeout-minutes: 25
-        continue-on-error: true
         run: npm run fetch-binaries -- -Solo libreoffice
 
       - name: Compilar instalador y versión portable

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Descarga los programas externos que usa pdfreaaaader y los deja en la carpeta «resources».
 
@@ -108,7 +108,7 @@ if (Quiere 'ghostscript') {
     # 1) Se abre el instalador con 7-Zip: no se ejecuta ni toca el registro de Windows
     $sz = Obtener7z
     if ($sz) {
-      Write-Host '  extrayendo con 7-Zip…'
+      Write-Host '  extrayendo con 7-Zip...'
       & $sz x -y "-o$dest" $instalador | Out-Null
     }
     # 2) Si no hay 7-Zip se ejecuta el instalador en silencio (NSIS: /D debe ir al final y sin comillas).
@@ -121,6 +121,11 @@ if (Quiere 'ghostscript') {
       if (-not $p.WaitForExit(30000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
     }
     if (-not (Buscar $dest 'gswin64c.exe')) { throw 'La instalación de Ghostscript no creó gswin64c.exe en resources\ghostscript.' }
+    # Sobra todo lo que no hace falta para ejecutar gswin64c (se conserva vcredist_x64.exe por si el equipo no tiene el runtime de Visual C++)
+    foreach ($sobra in '$PLUGINSDIR', 'doc', 'examples', 'uninstgs.exe.nsis') {
+      $r = Join-Path $dest $sobra
+      if (Test-Path -LiteralPath $r) { Remove-Item -Recurse -Force -LiteralPath $r }
+    }
     Write-Host "  listo ($(Tamano $dest))"
   }
 }
@@ -132,23 +137,40 @@ if (Quiere 'libreoffice') {
   if ((Buscar $dest 'soffice.exe') -and -not $Forzar) {
     Write-Host '  ya está en resources\libreoffice'
   } else {
-    $version = $null
+    # Versiones publicadas en «stable», de la más nueva a la más antigua. La más nueva a veces aún no tiene MSI para Windows,
+    # así que se prueba cada una con una petición HEAD hasta encontrar la primera que existe.
+    $versiones = @()
     try {
       $indice = Invoke-WebRequest 'https://download.documentfoundation.org/libreoffice/stable/' -UseBasicParsing
-      $version = $indice.Links |
+      $versiones = @($indice.Links |
         Where-Object { $_.href -match '^\d+\.\d+\.\d+/?$' } |
         ForEach-Object { $_.href.TrimEnd('/') } |
         Sort-Object { [version]$_ } -Descending |
-        Select-Object -First 1
+        Select-Object -First 6)
     } catch {
-      Write-Host '  (no se pudo consultar la última versión; se usa una conocida)'
+      Write-Host '  (no se pudo consultar las versiones de LibreOffice)'
     }
-    if (-not $version) { $version = '24.8.4' }
-    $nombre = "LibreOffice_${version}_Win_x86-64.msi"
+    $url = $null
+    foreach ($v in $versiones) {
+      $nombre = "LibreOffice_${v}_Win_x86-64.msi"
+      $candidata = "https://download.documentfoundation.org/libreoffice/stable/$v/win/x86_64/$nombre"
+      try {
+        Invoke-WebRequest -Uri $candidata -Method Head -UseBasicParsing | Out-Null
+        $url = $candidata
+        break
+      } catch {
+        Write-Host "  $v no tiene instalador para Windows, se prueba la anterior"
+      }
+    }
+    if (-not $url) {
+      # Última opción: una versión conocida del archivo histórico
+      $nombre = 'LibreOffice_24.8.4_Win_x86-64.msi'
+      $url = "https://downloadarchive.documentfoundation.org/libreoffice/old/24.8.4.2/win/x86_64/$nombre"
+    }
     $msi = Join-Path $tmp $nombre
-    Descargar "https://download.documentfoundation.org/libreoffice/stable/$version/win/x86_64/$nombre" $msi
+    Descargar $url $msi
     if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-    Write-Host '  extrayendo (instalación administrativa, no instala nada en el sistema)…'
+    Write-Host '  extrayendo (instalacion administrativa, no instala nada en el sistema)...'
     $p = Start-Process msiexec.exe -ArgumentList '/a', "`"$msi`"", '/qn', "TARGETDIR=`"$dest`"" -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "msiexec terminó con el código $($p.ExitCode)." }
     if (-not (Buscar $dest 'soffice.exe')) { throw 'No se encontró soffice.exe tras extraer LibreOffice.' }

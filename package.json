@@ -16,8 +16,8 @@
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --win nsis portable",
-    "dist:dir": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder --win nsis portable --publish never",
+    "dist:dir": "npm run build && electron-builder --dir --publish never",
     "fetch-binaries": "powershell -ExecutionPolicy Bypass -File scripts/fetch-binaries.ps1",
     "postinstall": "node scripts/copiar-recursos.mjs",
     "icons": "node scripts/generar-iconos.mjs"

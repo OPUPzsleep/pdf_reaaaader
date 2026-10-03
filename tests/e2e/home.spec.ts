@@ -30,3 +30,19 @@ test('home: tarjetas, buscador y tema claro/oscuro', async () => {
 
   await app.close();
 });
+
+test('todas las herramientas se abren sin errores', async () => {
+  const { app, page } = await abrirApp();
+  const ids = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid^="tarjeta-"]')).map((e) => e.getAttribute('data-testid')!.replace('tarjeta-', '')));
+  expect(ids.length).toBe(29);
+  for (const id of ids) {
+    await page.evaluate((i) => (location.hash = `#/herramienta/${i}`), id);
+    await page.locator(`[data-herramienta="${id}"]`).waitFor();
+    // Cada vista carga (no muestra «En construcción» ni la pantalla de error) y tiene su zona de archivos o campos de entrada
+    await expect(page.getByTestId('error-interfaz')).toHaveCount(0);
+    await expect(page.getByText('En construcción')).toHaveCount(0);
+    await expect(page.locator('.herramienta h1')).toBeVisible();
+    await expect(page.locator('[data-testid="zona-archivos"], [data-testid="campo-url"], [data-testid="activar-camara"]').first()).toBeVisible({ timeout: 10_000 });
+  }
+  await app.close();
+});

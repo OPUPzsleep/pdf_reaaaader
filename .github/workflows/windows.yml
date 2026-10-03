@@ -95,7 +95,13 @@ jobs:
 
           El instalador no está firmado: Windows SmartScreen puede avisar la primera vez («Más información» → «Ejecutar de todas formas»).
           "@
-          gh release create $env:GITHUB_REF_NAME $archivos --title "pdfreaaaader $env:GITHUB_REF_NAME" --notes $notas
+          # Si la versión ya existe (creada a mano desde la web), solo se le añaden los archivos
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME $archivos --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME $archivos --title "pdfreaaaader $env:GITHUB_REF_NAME" --notes $notas
+          }
 
       - uses: actions/upload-artifact@v4
         with:

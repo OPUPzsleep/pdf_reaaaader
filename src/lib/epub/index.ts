@@ -57,6 +57,14 @@ export async function metadatosDelPdf(doc: PDFDocumentProxy): Promise<{ titulo: 
 
 /** Convierte un PDF abierto con pdf.js en un EPUB 3. */
 export async function convertirPdfAEpub(e: EntradaConversion): Promise<ResultadoConversion> {
+  try {
+    return await convertir(e);
+  } finally {
+    await e.render.liberar?.();
+  }
+}
+
+async function convertir(e: EntradaConversion): Promise<ResultadoConversion> {
   const { doc, ops, render, opciones } = e;
   const progreso: Progreso = e.progreso ?? (() => undefined);
   const total = doc.numPages;

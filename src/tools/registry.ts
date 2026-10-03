@@ -225,6 +225,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: 'PDF a EPUB',
     descripcion: 'Convierte un PDF en un libro electrónico EPUB adaptable o de diseño fijo.',
     icono: BookOpen,
+    componente: lazy(() => import('./pdf-a-epub')),
     claves: ['libro', 'ebook', 'kindle', 'lector', 'ocr'],
   },
 

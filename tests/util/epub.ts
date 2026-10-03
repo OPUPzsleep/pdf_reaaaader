@@ -8,6 +8,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import JSZip from 'jszip';
 import type { ProveedorRender } from '../../src/lib/epub/tipos';
 import type { OperadoresPdf } from '../../src/lib/epub/extraer';
+import { MotorOcr } from '../../src/lib/epub/ocr';
 
 export const OPS_NODE: OperadoresPdf = {
   save: pdfjs.OPS.save,
@@ -25,8 +26,34 @@ export async function abrirDoc(datos: Uint8Array): Promise<PDFDocumentProxy> {
 }
 
 /** Render real en node (pdf.js + @napi-rs/canvas) con la misma interfaz que usa la app. */
-export function renderNode(doc: PDFDocumentProxy): ProveedorRender {
+export function renderNode(doc: PDFDocumentProxy, ocr?: { idioma: string }): ProveedorRender {
+  let motor: Promise<MotorOcr> | null = null;
   return {
+    ocrPagina: ocr
+      ? async (indice) => {
+          motor ??= (async () => {
+            const { createWorker } = await import('tesseract.js');
+            const lang = ocr.idioma.split('+')[0];
+            const w = await createWorker(ocr.idioma, 1, { langPath: path.resolve(`node_modules/@tesseract.js-data/${lang}/4.0.0_best_int`), gzip: true, cacheMethod: 'none' });
+            return MotorOcr.envolver(w);
+          })();
+          const m = await motor;
+          const pagina = await doc.getPage(indice + 1);
+          const v1 = pagina.getViewport({ scale: 1 });
+          const escala = 300 / 72;
+          const vp = pagina.getViewport({ scale: escala });
+          const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height));
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await pagina.render({ canvas: canvas as never, canvasContext: ctx as never, viewport: vp, background: '#ffffff' }).promise;
+          return m.reconocer(canvas.toBuffer('image/png'), escala, v1.height);
+        }
+      : undefined,
+    async liberar() {
+      if (motor) await (await motor).terminar();
+      motor = null;
+    },
     async paginaAJpeg(indice, anchoPx) {
       const pagina = await doc.getPage(indice + 1);
       const v1 = pagina.getViewport({ scale: 1 });

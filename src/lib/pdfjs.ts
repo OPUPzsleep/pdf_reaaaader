@@ -9,6 +9,18 @@ const base = (carpeta: string) => new URL(`./pdfjs/${carpeta}/`, document.baseUR
 
 export type { PDFDocumentProxy, PDFPageProxy };
 
+/** Códigos de operación que usa el conversor a EPUB para localizar imágenes. */
+export const OPERADORES = {
+  save: pdfjs.OPS.save,
+  restore: pdfjs.OPS.restore,
+  transform: pdfjs.OPS.transform,
+  paintImageXObject: pdfjs.OPS.paintImageXObject,
+  paintInlineImageXObject: pdfjs.OPS.paintInlineImageXObject,
+  paintImageMaskXObject: pdfjs.OPS.paintImageMaskXObject,
+  paintFormXObjectBegin: pdfjs.OPS.paintFormXObjectBegin,
+  paintFormXObjectEnd: pdfjs.OPS.paintFormXObjectEnd,
+};
+
 /** Abre un PDF con pdf.js. Se copia el buffer porque pdf.js lo transfiere al worker. */
 export async function abrirPdfjs(datos: Uint8Array): Promise<PDFDocumentProxy> {
   try {

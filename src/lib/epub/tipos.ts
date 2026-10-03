@@ -120,6 +120,8 @@ export interface ProveedorRender {
   regionAImagen(indice: number, r: { x: number; y: number; ancho: number; alto: number }, anchoPx: number): Promise<{ datos: Uint8Array; tipo: 'jpeg' | 'png' }>;
   /** Reconoce el texto de una página mediante OCR y devuelve líneas con su recuadro (coordenadas visuales) */
   ocrPagina?(indice: number): Promise<Fragmento[]>;
+  /** Libera recursos (el trabajador de OCR) al terminar */
+  liberar?(): Promise<void>;
 }
 
 export interface Progreso {

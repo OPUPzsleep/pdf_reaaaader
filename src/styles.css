@@ -293,3 +293,8 @@ input[type='range'] { width: 100%; accent-color: var(--acento); }
 .escaner { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 .area-recorte { display: flex; justify-content: center; padding: 8px; background: repeating-conic-gradient(var(--superficie-2) 0% 25%, var(--superficie) 0% 50%) 50% / 16px 16px; border-radius: 10px; }
 .origen-html { display: flex; flex-direction: column; gap: 12px; }
+
+/* PDF a EPUB */
+.entrada.ancho { min-width: 280px; }
+.resumen-lista { margin: 0; padding-left: 18px; color: var(--texto-suave); }
+.aviso-epub { color: #d97706; background: color-mix(in srgb, #f59e0b 12%, var(--superficie)); border-color: color-mix(in srgb, #f59e0b 45%, var(--borde)); }

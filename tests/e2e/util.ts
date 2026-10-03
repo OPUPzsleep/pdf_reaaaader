@@ -26,6 +26,8 @@ export async function irA(page: Page, id: string) {
   await page.evaluate((i) => {
     location.hash = `#/herramienta/${i}`;
   }, id);
+  // Esperar a que la herramienta pedida sustituya a la anterior (si no, se podría subir el archivo a la vista que se va)
+  await page.locator(`[data-herramienta="${id}"]`).waitFor();
   await page.getByTestId('zona-archivos').first().waitFor();
 }
 

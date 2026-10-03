@@ -23,7 +23,7 @@ export function ToolPage() {
   const cat = categoriaPorId(h.categoria);
 
   return (
-    <div className="herramienta" data-familia={cat.familia}>
+    <div className="herramienta" data-familia={cat.familia} data-herramienta={h.id}>
       <div className="herramienta-cab">
         <Link to="/" className="volver">
           <ArrowLeft size={16} /> Todas las herramientas

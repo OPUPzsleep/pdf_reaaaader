@@ -97,6 +97,12 @@ describe.skipIf(!hayLibreOffice)('LibreOffice', () => {
     expect((await textosPorPagina(pdf))[0]).toContain('Informe trimestral de ventas');
   }, 240_000);
 
+  it('RTF a PDF', async () => {
+    const rtf = Buffer.from('{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Arial;}}\\f0\\fs28 Hola desde LibreOffice.\\par Segunda linea.\\par}');
+    const pdf = await officeAPdf(rutas, perfil, new Uint8Array(rtf), 'rtf');
+    expect((await textosPorPagina(pdf))[0]).toContain('Hola desde LibreOffice');
+  }, 240_000);
+
   it('Excel a PDF', async () => {
     const pdf = await officeAPdf(rutas, perfil, crearOffice('xlsx'), '.xlsx');
     const t = (await textosPorPagina(pdf))[0];

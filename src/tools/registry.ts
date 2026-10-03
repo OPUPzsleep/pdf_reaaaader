@@ -2,6 +2,7 @@ import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
 import {
   ArrowDownUp,
+  ArrowRightLeft,
   BookOpen,
   Braces,
   Code2,
@@ -301,6 +302,24 @@ export const HERRAMIENTAS: Herramienta[] = [
   },
 
   // ───────── Imágenes · Convertir
+  {
+    id: 'jpg-a-png',
+    categoria: 'img-convertir',
+    nombre: 'JPG a PNG',
+    descripcion: 'Convierte imágenes JPG a PNG, una por una o por lotes, sin cambiar su tamaño.',
+    icono: ArrowRightLeft,
+    componente: lazy(() => import('./jpg-a-png')),
+    claves: ['jpeg', 'jpg', 'png', 'convertir', 'transformar'],
+  },
+  {
+    id: 'png-a-jpg',
+    categoria: 'img-convertir',
+    nombre: 'PNG a JPG',
+    descripcion: 'Convierte imágenes PNG a JPG con la calidad que elijas; la transparencia se rellena con un color.',
+    icono: ArrowRightLeft,
+    componente: lazy(() => import('./png-a-jpg')),
+    claves: ['jpeg', 'jpg', 'png', 'convertir', 'transparencia', 'fondo'],
+  },
   {
     id: 'convertir-a-jpg',
     categoria: 'img-convertir',

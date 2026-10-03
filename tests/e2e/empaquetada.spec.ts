@@ -123,3 +123,50 @@ test('empaquetada: Ghostscript incluido comprime un PDF', async () => {
   expect(fs.statSync(salida).size).toBeLessThan(fs.statSync(origen).size * 0.7);
   await app.close();
 });
+
+test('empaquetada: Word, Excel y PowerPoint a PDF con los motores propios (Chromium imprime el PDF)', async () => {
+  test.setTimeout(240_000);
+  const { app, page } = await abrirApp();
+  const fixtures = path.resolve('tests/fixtures/office');
+  const casos: [string, string, string, string][] = [
+    ['word-a-pdf', 'informe.docx', 'informe.pdf', 'Informe trimestral de ventas'],
+    ['excel-a-pdf', 'libro.xlsx', 'libro.pdf', '1.234.567'],
+    ['powerpoint-a-pdf', 'presentacion.pptx', 'presentacion.pdf', 'Plan de lanzamiento'],
+  ];
+  for (const [herramienta, entrada, salida, esperado] of casos) {
+    const destino = path.join(dir, salida);
+    await simularGuardado(app, [destino]);
+    await irA(page, herramienta);
+    await expect(page.getByTestId('falta-binario')).toHaveCount(0);
+    await subir(page, path.join(fixtures, entrada));
+    await page.getByTestId('accion').click();
+    await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+    expect((await textosPorPagina(leer(destino))).join('\n')).toContain(esperado);
+  }
+  await app.close();
+});
+
+test('empaquetada: Word → PDF → EPUB encadenado dentro de la app', async () => {
+  test.setTimeout(240_000);
+  const { app, page } = await abrirApp();
+  const pdf = path.join(dir, 'cadena.pdf');
+  await simularGuardado(app, [pdf]);
+  await irA(page, 'word-a-pdf');
+  await subir(page, path.resolve('tests/fixtures/office/informe.docx'));
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+
+  const epub = path.join(dir, 'cadena.epub');
+  await simularGuardado(app, [epub]);
+  await irA(page, 'pdf-a-epub');
+  await subir(page, pdf);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+  const { zip, archivos } = await leerEpub(leer(epub));
+  let plano = '';
+  for (const a of archivos.filter((x) => /\.xhtml$/.test(x))) plano += ' ' + (await zip.file(a)!.async('string')).replace(/<[^>]+>/g, ' ');
+  plano = plano.replace(/\s+/g, ' ');
+  expect(plano).toContain('Informe trimestral de ventas');
+  expect(plano).toContain('Preparar los datos');
+  await app.close();
+});

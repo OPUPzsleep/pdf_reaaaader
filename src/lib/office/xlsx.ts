@@ -473,7 +473,7 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
   }
 
   if (!hojas.length) throw new Error('El libro de Excel no tiene hojas con datos que imprimir.');
-  const hoja = `*{box-sizing:border-box}html,body{margin:0;padding:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:${familiaCss(tema.fuenteTexto ?? 'Calibri')};font-size:11pt}td{padding:0 2px;line-height:1.2;overflow:hidden}section{display:block}${reglasClase.join('')}`;
+  const hoja = `*{box-sizing:border-box}html,body{margin:0;padding:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:${familiaCss(tema.fuenteTexto ?? 'Calibri')};font-size:11pt}td{padding:0 1px;line-height:1.2;overflow:hidden}section{display:block}${reglasClase.join('')}`;
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:"><title>Libro</title><style>${hoja}${reglasPagina.join('')}</style></head><body>${hojas.join('')}</body></html>`;
   return { html, avisos: [...avisos], unidades: hojas.length };
 }

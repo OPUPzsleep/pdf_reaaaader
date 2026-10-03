@@ -132,10 +132,11 @@ ws2 = wb.create_sheet('Resumen')
 ws2.append(['Mes', 'Importe', 'Estado'])
 for i, (m, v, e) in enumerate((('Enero', 1500.5, True), ('Febrero', -230.25, False), ('Marzo', 0, True)), 2):
     ws2.append([m, v, e]); ws2.cell(i, 2).number_format = '#,##0.00;[Red]-#,##0.00'
-ws2['A6'] = 'Texto con ajuste de línea automático en una celda estrecha'; ws2['A6'].alignment = Alignment(wrap_text=True, vertical='top'); ws2.column_dimensions['A'].width = 16; ws2.row_dimensions[6].height = 60
+ws2['A6'] = 'Texto con ajuste de línea automático en una celda estrecha'; ws2['A6'].alignment = Alignment(wrap_text=True, vertical='top'); ws2.column_dimensions['A'].width = 16; ws2.column_dimensions['B'].width = 12; ws2.column_dimensions['C'].width = 14; ws2.row_dimensions[6].height = 60
 ws3 = wb.create_sheet('Ancha')
 ws3.append([f'Columna {i}' for i in range(1, 25)])
 ws3.append([i * 100.5 for i in range(1, 25)])
+for i in range(1, 25): ws3.column_dimensions[chr(64 + i) if i <= 26 else 'A'].width = 11
 ws3.page_setup.orientation = 'landscape'
 wb.save(os.path.join(SALIDA, 'libro.xlsx'))
 

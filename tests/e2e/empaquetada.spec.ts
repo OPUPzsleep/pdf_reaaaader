@@ -100,3 +100,26 @@ test('empaquetada: quitar fondo con onnxruntime desde el asar', async () => {
   expect(data[(10 * info.width + 10) * 4 + 3]).toBeLessThan(60);
   await app.close();
 });
+
+test('empaquetada: Ghostscript incluido comprime un PDF', async () => {
+  test.skip(!fs.existsSync(path.resolve('resources/ghostscript')), 'falta Ghostscript en resources/ghostscript');
+  const { app, page } = await abrirApp();
+  const ruido = Buffer.alloc(1200 * 900 * 3);
+  for (let i = 0; i < ruido.length; i++) ruido[i] = (i * 2654435761) >>> 24;
+  const { PDFDocument } = await import('pdf-lib');
+  const d = await PDFDocument.create();
+  const img = await d.embedJpg(await sharp(ruido, { raw: { width: 1200, height: 900, channels: 3 } }).jpeg({ quality: 95 }).toBuffer());
+  d.addPage([595, 842]).drawImage(img, { x: 20, y: 300, width: 555, height: 416 });
+  const origen = path.join(dir, 'pesado.pdf');
+  fs.writeFileSync(origen, await d.save());
+  const salida = path.join(dir, 'pesado_comprimido.pdf');
+  await simularGuardado(app, [salida]);
+  await irA(page, 'comprimir-pdf');
+  await expect(page.getByTestId('falta-binario')).toHaveCount(0);
+  await subir(page, origen);
+  await page.getByRole('radio', { name: 'Compresión máxima' }).click();
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible({ timeout: 120_000 });
+  expect(fs.statSync(salida).size).toBeLessThan(fs.statSync(origen).size * 0.7);
+  await app.close();
+});

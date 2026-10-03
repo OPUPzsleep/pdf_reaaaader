@@ -60,6 +60,27 @@ function Tamano([string]$carpeta) {
   '{0:N0} MB' -f ($bytes / 1MB)
 }
 
+# 7-Zip (instalado, en el PATH o extraído del MSI oficial) para abrir el instalador de Ghostscript sin ejecutarlo
+function Obtener7z {
+  foreach ($c in @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe")) { if (Test-Path $c) { return $c } }
+  $en = Get-Command 7z.exe -ErrorAction SilentlyContinue
+  if ($en) { return $en.Source }
+  $dir = Join-Path $tmp '7zip'
+  $r = Buscar $dir '7z.exe'
+  if (-not $r) {
+    try {
+      $msi = Join-Path $tmp '7z-x64.msi'
+      Descargar 'https://www.7-zip.org/a/7z2409-x64.msi' $msi
+      Start-Process msiexec.exe -ArgumentList '/a', "`"$msi`"", '/qn', "TARGETDIR=`"$dir`"" -Wait | Out-Null
+      $r = Buscar $dir '7z.exe'
+    } catch {
+      Write-Host '  (no se pudo conseguir 7-Zip)'
+    }
+  }
+  if ($r) { return $r.FullName }
+  return $null
+}
+
 # ───────────────────────── Ghostscript ─────────────────────────
 if (Quiere 'ghostscript') {
   Write-Host '== Ghostscript'
@@ -83,15 +104,21 @@ if (Quiere 'ghostscript') {
     $instalador = Join-Path $tmp $nombre
     Descargar $url $instalador
     if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-    # Instalación silenciosa (NSIS): /D debe ser el último argumento y sin comillas.
-    # No se usa «Start-Process -Wait»: espera también a los procesos hijos del instalador y puede quedarse colgado.
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    $p = Start-Process -FilePath $instalador -ArgumentList '/S', "/D=$dest" -PassThru
-    $limite = (Get-Date).AddMinutes(8)
-    while ((Get-Date) -lt $limite -and -not (Buscar $dest 'gswin64c.exe')) { Start-Sleep -Seconds 3 }
-    if (-not $p.WaitForExit(30000)) {
-      Write-Host '  el instalador sigue abierto; se cierra (los archivos ya están copiados)'
-      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    # 1) Se abre el instalador con 7-Zip: no se ejecuta ni toca el registro de Windows
+    $sz = Obtener7z
+    if ($sz) {
+      Write-Host '  extrayendo con 7-Zip…'
+      & $sz x -y "-o$dest" $instalador | Out-Null
+    }
+    # 2) Si no hay 7-Zip se ejecuta el instalador en silencio (NSIS: /D debe ir al final y sin comillas).
+    #    No se usa «Start-Process -Wait»: espera también a los procesos hijos y puede quedarse colgado.
+    if (-not (Buscar $dest 'gswin64c.exe')) {
+      Write-Host '  instalando en silencio…'
+      $p = Start-Process -FilePath $instalador -ArgumentList '/S', "/D=$dest" -PassThru
+      $limite = (Get-Date).AddMinutes(8)
+      while ((Get-Date) -lt $limite -and -not (Buscar $dest 'gswin64c.exe')) { Start-Sleep -Seconds 3 }
+      if (-not $p.WaitForExit(30000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
     }
     if (-not (Buscar $dest 'gswin64c.exe')) { throw 'La instalación de Ghostscript no creó gswin64c.exe en resources\ghostscript.' }
     Write-Host "  listo ($(Tamano $dest))"

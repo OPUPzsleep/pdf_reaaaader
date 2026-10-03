@@ -3,7 +3,12 @@ name: Windows (instalador y pruebas)
 on:
   push:
     branches: ['claude/**', 'main']
+    # Una etiqueta «v1.2.3» compila y publica el instalador en Releases
+    tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   windows:
@@ -74,6 +79,23 @@ jobs:
         if: always()
         shell: pwsh
         run: Get-ChildItem release -File | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - name: Publicar el instalador en Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $archivos = (Get-ChildItem release -Filter *.exe -File).FullName
+          $notas = @"
+          Instalador y versión portable para Windows 10/11 (64 bits). Funciona sin conexión.
+
+          - **pdfreaaaader-Setup-*.exe**: instalador (NSIS).
+          - **pdfreaaaader-Portable-*.exe**: versión portable, sin instalar.
+
+          El instalador no está firmado: Windows SmartScreen puede avisar la primera vez («Más información» → «Ejecutar de todas formas»).
+          "@
+          gh release create $env:GITHUB_REF_NAME $archivos --title "pdfreaaaader $env:GITHUB_REF_NAME" --notes $notas
 
       - uses: actions/upload-artifact@v4
         with:

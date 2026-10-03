@@ -72,7 +72,7 @@ El HTML intermedio no puede cargar nada de fuera (política de contenido `defaul
 - Los **gráficos** (Excel, Word, PowerPoint) se dibujan a partir de los datos que guarda el archivo: columnas, barras, líneas, áreas, sectores, anillos y dispersión, con título, ejes, leyenda y
   etiquetas de datos (incluidos los de librerías que no guardan los datos en el gráfico, que se leen de las celdas). Los demás tipos (radar, burbujas, cotizaciones…), los ejes secundarios,
   los objetos SmartArt y las imágenes EMF/WMF se sustituyen por un recuadro y se avisa.
-- Las **fórmulas** de Excel se muestran con el último valor calculado que guardó Excel; un libro creado por una librería sin valores guardados saldrá con esas celdas vacías.
+- Las **fórmulas** de Excel se muestran con el último valor que guardó Excel. Si el libro no lo trae (lo crean librerías como openpyxl o XlsxWriter) o pide recalcular al abrir, la app las calcula con un evaluador propio: operadores, referencias y rangos (también entre hojas), fórmulas compartidas y las funciones más usadas (SUMA, PROMEDIO, MIN, MAX, SI, Y, O, SI.ERROR, REDONDEAR, SUMAR.SI, CONTAR.SI, MAYUSC, IZQUIERDA, EXTRAE…, en español o inglés; sin BUSCARV ni funciones de fecha por ahora). Una función no admitida conserva el valor guardado o, si no hay, aparece `#NAME?` con un aviso.
 - La paginación puede diferir de la de Word en algún salto de página, y las fuentes que no estén instaladas se sustituyen por otras parecidas.
 
 ## PDF a Word y PDF a PowerPoint

@@ -4,6 +4,7 @@ import { completarCaches, graficoASvg } from './grafico';
 import type { ResultadoOffice } from './docx';
 import { colorFormato, FORMATOS_INTEGRADOS, formatearValor, type OpcionesFormato } from './xlsxFormato';
 import { descendiente, hijo, hijos, num, type Nodo } from './xml';
+import { desplazarFormula, ErrorExcel, Evaluador, type FuenteCeldas, type Valor } from './formulas';
 
 const MAX_FILAS = 10000;
 const MAX_COLUMNAS = 200;
@@ -174,20 +175,64 @@ function anchoColumnaPx(caracteres: number): number {
   return Math.max(0, Math.trunc(caracteres * 7 + 5));
 }
 
-/** Valores (texto) de las celdas de una hoja, por «fila,columna» */
-function valoresDeHoja(hoja: Nodo, compartidas: string[]): Map<string, string> {
-  const m = new Map<string, string>();
+interface InfoHoja {
+  /** Valor guardado de cada celda («fila,columna»); en las de fórmula, el último resultado calculado */
+  valores: Map<string, Valor>;
+  /** Fórmulas cuyo resultado hay que calcular (el libro no lo trae o pide recalcular al abrir) */
+  pendientes: Map<string, string>;
+}
+
+/** Lee los valores guardados de una hoja y localiza las fórmulas sin resultado (resolviendo las compartidas) */
+function escanearHoja(hoja: Nodo, compartidas: string[], recalcular: boolean): InfoHoja {
+  const valores = new Map<string, Valor>();
+  const pendientes = new Map<string, string>();
+  const maestras = new Map<string, { formula: string; fila: number; col: number }>();
+  let filaImplicita = 0;
   for (const fila of hijos(hijo(hoja, 'sheetData'), 'row')) {
+    const nf = fila.a.r ? Number(fila.a.r) : filaImplicita + 1;
+    filaImplicita = nf;
+    let colImplicita = 0;
     for (const c of hijos(fila, 'c')) {
-      const ref = c.a.r ? leerReferencia(c.a.r) : null;
+      const ref = c.a.r ? leerReferencia(c.a.r) : { col: colImplicita + 1, fila: nf };
       if (!ref) continue;
+      colImplicita = ref.col;
+      const clave = `${ref.fila},${ref.col}`;
       const v = hijo(c, 'v')?.t;
       const t = c.a.t ?? 'n';
-      const valor = t === 's' && v !== undefined ? (compartidas[Number(v)] ?? '') : t === 'inlineStr' ? textoDeSi(hijo(c, 'is') ?? { n: 'is', a: {}, h: [], t: '' }) : (v ?? '');
-      if (valor !== '') m.set(`${ref.fila},${ref.col}`, valor);
+      let guardado: Valor | undefined;
+      if (t === 'inlineStr') guardado = textoDeSi(hijo(c, 'is') ?? { n: 'is', a: {}, h: [], t: '' });
+      else if (v !== undefined && v !== '') {
+        if (t === 's') guardado = compartidas[Number(v)] ?? '';
+        else if (t === 'str') guardado = v;
+        else if (t === 'b') guardado = v === '1' || v === 'true';
+        else if (t === 'e') guardado = new ErrorExcel(v);
+        else guardado = Number.isFinite(Number(v)) ? Number(v) : v;
+      }
+      if (guardado !== undefined && guardado !== '') valores.set(clave, guardado);
+
+      const f = hijo(c, 'f');
+      if (!f || f.a.t === 'dataTable') continue;
+      let texto = f.t;
+      if (f.a.t === 'shared' && f.a.si !== undefined) {
+        if (texto) maestras.set(f.a.si, { formula: texto, fila: ref.fila, col: ref.col });
+        else {
+          const m = maestras.get(f.a.si);
+          if (m) texto = desplazarFormula(m.formula, ref.fila - m.fila, ref.col - m.col);
+        }
+      }
+      if (texto && (recalcular || guardado === undefined)) pendientes.set(clave, texto);
     }
   }
-  return m;
+  return { valores, pendientes };
+}
+
+/** Un resultado de fórmula como celda de la tabla (tipo y texto) */
+function valorACelda(v: Valor): { tipo: string; valor: string } {
+  if (v instanceof ErrorExcel) return { tipo: 'e', valor: v.codigo };
+  if (typeof v === 'boolean') return { tipo: 'b', valor: v ? '1' : '0' };
+  if (typeof v === 'number') return { tipo: 'n', valor: Number.isFinite(v) ? String(v) : '#NUM!' };
+  if (v === null) return { tipo: 'n', valor: '0' };
+  return { tipo: 'str', valor: v };
 }
 
 export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFormato> = {}): Promise<ResultadoOffice> {
@@ -261,19 +306,62 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
 
   // Hojas ya leídas (por si un gráfico apunta a celdas de otra hoja)
   const cacheHojas = new Map<string, Nodo>();
-  const cacheValores = new Map<string, Map<string, string>>();
   for (const hx of hojasXml) {
     const rel = rels.get(hx.a.id ?? '');
     const nodo = rel ? await paquete.xml(rel.destino) : null;
     if (rel && nodo) cacheHojas.set(rel.destino, nodo);
   }
-  const valoresPorHoja = (destino: string, nodo: Nodo) => {
-    let v = cacheValores.get(destino);
-    if (!v) {
-      v = valoresDeHoja(nodo, compartidas);
-      cacheValores.set(destino, v);
+
+  // Valores guardados y fórmulas por hoja (se leen al necesitarlos); el evaluador resuelve las fórmulas sin resultado guardado
+  const recalcular = ['1', 'true'].includes(hijo(libro, 'calcPr')?.a.fullCalcOnLoad ?? '');
+  const infoPorNombre = new Map<string, InfoHoja | null>();
+  const infoDe = (nombre: string): InfoHoja | null => {
+    const clave = nombre.toLowerCase();
+    let info = infoPorNombre.get(clave);
+    if (info === undefined) {
+      const hx = hojasXml.find((h) => (h.a.name ?? '').toLowerCase() === clave);
+      const rel = hx ? rels.get(hx.a.id ?? '') : undefined;
+      const nodo = rel ? cacheHojas.get(rel.destino) : undefined;
+      info = nodo ? escanearHoja(nodo, compartidas, recalcular) : null;
+      infoPorNombre.set(clave, info);
     }
-    return v;
+    return info;
+  };
+  const fuente: FuenteCeldas = {
+    valor: (h, f, c) => infoDe(h)?.valores.get(`${f},${c}`),
+    formula: (h, f, c) => infoDe(h)?.pendientes.get(`${f},${c}`),
+    existeHoja: (h) => infoDe(h) !== null,
+  };
+  const evaluador = new Evaluador(fuente);
+  /** Valor de una celda de fórmula: el calculado o, si la fórmula usa algo no admitido, el último guardado en el libro */
+  const resultadoFormula = (nombre: string, fila: number, col: number): Valor => {
+    const r = evaluador.celda(nombre, fila, col);
+    if (r instanceof ErrorExcel && r.codigo === '#NAME?') {
+      const guardado = infoDe(nombre)?.valores.get(`${fila},${col}`);
+      if (guardado !== undefined) return guardado;
+      avisos.add('Alguna fórmula de Excel usa funciones que no se calculan (aparece #NAME?).');
+    }
+    return r;
+  };
+  const textosPorHoja = new Map<string, Map<string, string>>();
+  /** Texto de cada celda de una hoja, con las fórmulas ya calculadas (para los gráficos) */
+  const textosDeHoja = (nombre: string): Map<string, string> => {
+    const clave = nombre.toLowerCase();
+    let m = textosPorHoja.get(clave);
+    if (m) return m;
+    m = new Map();
+    const info = infoDe(nombre);
+    if (info) {
+      for (const [k, v] of info.valores) if (!info.pendientes.has(k)) m.set(k, valorACelda(v).valor);
+      for (const k of info.pendientes.keys()) {
+        const [f, c] = k.split(',').map(Number);
+        const v = resultadoFormula(nombre, f, c);
+        const t = valorACelda(v).valor;
+        if (t !== '') m.set(k, t);
+      }
+    }
+    textosPorHoja.set(clave, m);
+    return m;
   };
 
   const hojas: string[] = [];
@@ -314,6 +402,7 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
     let filaImplicita = 0;
     let truncada = false;
     const datosHoja = hijo(hoja, 'sheetData');
+    const infoHoja = infoDe(nombreHoja);
     for (const fila of hijos(datosHoja, 'row')) {
       const nf = fila.a.r ? Number(fila.a.r) : filaImplicita + 1;
       filaImplicita = nf;
@@ -330,10 +419,11 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
         colImplicita = ref.col;
         if (ref.col > MAX_COLUMNAS) continue;
         const v = hijo(c, 'v')?.t;
-        const tipo = c.a.t ?? 'n';
+        let tipo = c.a.t ?? 'n';
         let valor: string | null = v ?? null;
         if (tipo === 's' && v !== undefined) valor = compartidas[Number(v)] ?? '';
         else if (tipo === 'inlineStr') valor = textoDeSi(hijo(c, 'is') ?? { n: 'is', a: {}, h: [], t: '' });
+        if (infoHoja?.pendientes.has(`${ref.fila},${ref.col}`)) ({ tipo, valor } = valorACelda(resultadoFormula(nombreHoja, ref.fila, ref.col)));
         const estilo = num(c, 's', 0);
         const tieneContenido = valor !== null && valor !== '';
         const visible = xfs[estilo]?.visible ?? false;
@@ -415,11 +505,8 @@ export async function xlsxAHtml(datos: Uint8Array, opciones: Partial<OpcionesFor
               if (!m) return null;
               const nombreHojaRef = (m[1] ?? m[2]).replace(/''/g, "'");
               const rango = leerRango(m[3].replace(/\$/g, ''));
-              const idxHoja = hojasXml.findIndex((hx2) => hx2.a.name === nombreHojaRef);
-              const relHoja = idxHoja >= 0 ? rels.get(hojasXml[idxHoja].a.id ?? '') : undefined;
-              const nodoHoja = relHoja ? cacheHojas.get(relHoja.destino) : undefined;
-              if (!rango || !nodoHoja) return null;
-              const valores = valoresPorHoja(relHoja!.destino, nodoHoja);
+              if (!rango || !infoDe(nombreHojaRef)) return null;
+              const valores = textosDeHoja(nombreHojaRef);
               const salida: string[] = [];
               for (let f = rango.f1; f <= rango.f2; f++) for (let c = rango.c1; c <= rango.c2; c++) salida.push(valores.get(`${f},${c}`) ?? '');
               return salida;

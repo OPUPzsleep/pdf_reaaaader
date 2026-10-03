@@ -49,6 +49,17 @@ function Descargar([string]$url, [string]$destino) {
   Move-Item -Force $parcial $destino
 }
 
+# «Start-Process -Wait» espera también a los procesos descendientes (el servicio de msiexec, por ejemplo) y puede colgarse:
+# se espera solo al proceso lanzado.
+function Ejecutar([string]$programa, [string[]]$argumentos, [int]$minutos = 20) {
+  $p = Start-Process -FilePath $programa -ArgumentList $argumentos -PassThru -WindowStyle Hidden
+  if (-not $p.WaitForExit($minutos * 60 * 1000)) {
+    Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    throw "$programa tardó más de $minutos minutos y se canceló."
+  }
+  return $p.ExitCode
+}
+
 function Buscar([string]$carpeta, [string]$nombre) {
   if (-not (Test-Path $carpeta)) { return $null }
   Get-ChildItem -Path $carpeta -Recurse -Filter $nombre -File -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -71,7 +82,7 @@ function Obtener7z {
     try {
       $msi = Join-Path $tmp '7z-x64.msi'
       Descargar 'https://www.7-zip.org/a/7z2409-x64.msi' $msi
-      Start-Process msiexec.exe -ArgumentList '/a', "`"$msi`"", '/qn', "TARGETDIR=`"$dir`"" -Wait | Out-Null
+      Ejecutar 'msiexec.exe' @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$dir`"") 10 | Out-Null
       $r = Buscar $dir '7z.exe'
     } catch {
       Write-Host '  (no se pudo conseguir 7-Zip)'
@@ -171,8 +182,10 @@ if (Quiere 'libreoffice') {
     Descargar $url $msi
     if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
     Write-Host '  extrayendo (instalacion administrativa, no instala nada en el sistema)...'
-    $p = Start-Process msiexec.exe -ArgumentList '/a', "`"$msi`"", '/qn', "TARGETDIR=`"$dest`"" -Wait -PassThru
-    if ($p.ExitCode -ne 0) { throw "msiexec terminó con el código $($p.ExitCode)." }
+    $t0 = Get-Date
+    $codigo = Ejecutar 'msiexec.exe' @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$dest`"") 30
+    Write-Host ("  msiexec termino con codigo {0} en {1:N0} s" -f $codigo, ((Get-Date) - $t0).TotalSeconds)
+    if ($codigo -ne 0 -and $codigo -ne 3010) { throw "msiexec terminó con el código $codigo." }
     if (-not (Buscar $dest 'soffice.exe')) { throw 'No se encontró soffice.exe tras extraer LibreOffice.' }
     Write-Host "  listo ($(Tamano $dest))"
   }

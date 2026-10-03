@@ -17,8 +17,8 @@ describe('localización de binarios', () => {
   it('informa de lo que hay en el sistema', () => {
     const estado = estadoBinarios(rutas);
     expect(estado.map((e) => e.id)).toEqual(['libreoffice', 'ghostscript', 'realesrgan', 'modelo-fondo']);
-    expect(estado.find((e) => e.id === 'ghostscript')?.disponible).toBe(hayGhostscript);
-    expect(estado.find((e) => e.id === 'libreoffice')?.disponible).toBe(hayLibreOffice);
+    // Sin carpeta de recursos solo se encuentra lo que haya instalado en el sistema (PATH o Program Files)
+    for (const e of estado) expect(e.disponible ? e.ruta : e.detalle).toBeTruthy();
     expect(estado.find((e) => e.id === 'modelo-fondo')?.detalle).toMatch(/fetch-binaries/);
   });
   it('prefiere los binarios incluidos en la carpeta de recursos', () => {

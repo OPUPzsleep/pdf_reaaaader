@@ -19,6 +19,8 @@ export async function abrirPdfjs(datos: Uint8Array): Promise<PDFDocumentProxy> {
       standardFontDataUrl: base('standard_fonts'),
       wasmUrl: base('wasm'),
       iccUrl: base('iccs'),
+      // Necesario para conocer el nombre real de la fuente (negrita/cursiva) al convertir a EPUB
+      fontExtraProperties: true,
     }).promise;
   } catch (e) {
     const msg = e instanceof Error ? `${e.name} ${e.message}` : String(e);

@@ -71,7 +71,7 @@ export interface SolicitudHtml {
   /** Una URL http/https, un archivo .html del disco o código HTML pegado */
   origen: { tipo: 'url'; url: string } | { tipo: 'html'; html: string } | { tipo: 'archivo'; ruta: string };
   /** Solo para PDF */
-  pdf?: { tamano: 'A4' | 'Letter' | 'A3' | 'Legal'; horizontal: boolean; margenMm: number; fondos: boolean };
+  pdf?: { tamano: 'A4' | 'Letter' | 'A3' | 'Legal'; horizontal: boolean; margenMm: number; fondos: boolean; tamanoCss?: boolean };
   /** Solo para imagen */
   imagen?: { ancho: number; formato: 'png' | 'jpeg'; calidad: number };
 }

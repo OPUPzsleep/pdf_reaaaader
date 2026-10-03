@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
 import sharp, { type Sharp } from 'sharp';
 import type { SolicitudHtml } from '../../src/types/api';
@@ -15,6 +18,8 @@ async function conVentana<T>(origen: SolicitudHtml['origen'], ancho: number, fn:
     height: 900,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
   });
+  // El HTML pegado o generado puede ser enorme (documentos de Office con imágenes): un «data:» tiene límite de tamaño, un archivo no.
+  let carpetaTemporal: string | null = null;
   try {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     let fallo: string | null = null;
@@ -26,7 +31,12 @@ async function conVentana<T>(origen: SolicitudHtml['origen'], ancho: number, fn:
         ? win.loadURL(origen.url)
         : origen.tipo === 'archivo'
           ? win.loadFile(origen.ruta)
-          : win.loadURL('data:text/html;charset=utf-8;base64,' + Buffer.from(origen.html, 'utf8').toString('base64'));
+          : (() => {
+              carpetaTemporal = fs.mkdtempSync(path.join(os.tmpdir(), 'pdfreaaaader-html-'));
+              const archivo = path.join(carpetaTemporal, 'documento.html');
+              fs.writeFileSync(archivo, origen.html, 'utf8');
+              return win.loadFile(archivo);
+            })();
     await Promise.race([
       carga,
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('La página tardó demasiado en cargar (60 s).')), 60_000)),
@@ -39,6 +49,7 @@ async function conVentana<T>(origen: SolicitudHtml['origen'], ancho: number, fn:
     return await fn(win);
   } finally {
     if (!win.isDestroyed()) win.destroy();
+    if (carpetaTemporal) fs.rmSync(carpetaTemporal, { recursive: true, force: true });
   }
 }
 
@@ -54,12 +65,13 @@ export async function htmlAPdf(s: SolicitudHtml): Promise<Uint8Array> {
   const op = s.pdf ?? { tamano: 'A4', horizontal: false, margenMm: 10, fondos: true };
   const m = op.margenMm / 25.4;
   return conVentana(s.origen, 1024, async (win) => {
+    // Con «tamanoCss» el tamaño de página y los márgenes los manda el propio documento (@page), como en los documentos de Office
     const buf = await win.webContents.printToPDF({
       pageSize: op.tamano,
       landscape: op.horizontal,
       printBackground: op.fondos,
-      margins: { top: m, bottom: m, left: m, right: m },
-      preferCSSPageSize: false,
+      margins: op.tamanoCss ? { top: 0, bottom: 0, left: 0, right: 0 } : { top: m, bottom: m, left: m, right: m },
+      preferCSSPageSize: !!op.tamanoCss,
     });
     return new Uint8Array(buf);
   });

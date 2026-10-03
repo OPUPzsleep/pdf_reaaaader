@@ -42,3 +42,17 @@ en el instalador (cambiable a descarga la primera vez si pesa demasiado).
 
 Instalador de 700 MB–1 GB (LibreOffice + modelos + Electron); fidelidad limitada de PDF→Office; Ghostscript es AGPL (revisar si se
 distribuye); Ampliar requiere GPU con Vulkan; PDF→EPUB con columnas/tablas es heurístico (de ahí el modo de diseño fijo).
+
+---
+
+## Estado de la implementación
+
+Las seis fases están implementadas (ver [README.md](README.md)). Diferencias respecto al plan:
+
+- **PDF a Excel**: LibreOffice no tiene filtro de importación de PDF en Calc (el PDF se abre siempre como documento de Draw y no se puede exportar a XLSX),
+  así que se implementó la extracción de tablas propia que el plan dejaba como plan B (`src/lib/tablas/`).
+- **PDF a Word / PowerPoint** sí usan LibreOffice (`writer_pdf_import`, `impress_pdf_import`).
+- **Ampliar x2 / x3**: el modelo siempre amplía x4 y el resultado se reduce con Lanczos, que da mejor calidad que los modelos x2/x3.
+- **Escanea a PDF**: sin la recepción de fotos del móvil por QR (era opcional en la fase 6).
+- El renderer se sirve por un esquema propio `app://` en lugar de `file://`.
+- Se añadió un flujo de GitHub Actions que compila el instalador en un Windows limpio y ejecuta las pruebas de humo de la app empaquetada.

@@ -1,0 +1,44 @@
+import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import path from 'node:path';
+
+export async function abrirApp(env: Record<string, string> = {}): Promise<{ app: ElectronApplication; page: Page }> {
+  // Con PDFREAAAADER_EXE se prueba la aplicación empaquetada (electron-builder) en vez del código fuente
+  const exe = process.env.PDFREAAAADER_EXE;
+  const app = await electron.launch({
+    executablePath: exe,
+    args: [...(exe ? [] : ['.']), '--no-sandbox', '--disable-gpu', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    cwd: path.resolve(process.cwd()),
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', ...env },
+  });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  return { app, page };
+}
+
+import fs from 'node:fs';
+import os from 'node:os';
+
+export function carpetaTemporal(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'pdfreaaaader-'));
+}
+
+export async function irA(page: Page, id: string) {
+  await page.evaluate((i) => {
+    location.hash = `#/herramienta/${i}`;
+  }, id);
+  // Esperar a que la herramienta pedida sustituya a la anterior (si no, se podría subir el archivo a la vista que se va)
+  await page.locator(`[data-herramienta="${id}"]`).waitFor();
+  await page.getByTestId('zona-archivos').first().waitFor();
+}
+
+/** Hace que el diálogo "Guardar como" devuelva siempre esta ruta (sin abrir ventana nativa). */
+export async function simularGuardado(app: ElectronApplication, rutas: string[]) {
+  await app.evaluate(({ dialog }, lista) => {
+    const cola = [...lista];
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: cola.shift() ?? cola[0] })) as typeof dialog.showSaveDialog;
+  }, rutas);
+}
+
+export async function subir(page: Page, rutas: string | string[]) {
+  await page.getByTestId('entrada-archivos').first().setInputFiles(rutas);
+}

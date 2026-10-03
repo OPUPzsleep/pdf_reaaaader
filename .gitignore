@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-electron/
+release/
+resources/*
+!resources/.gitkeep
+!resources/README.md
+tests/fixtures/generated/
+*.log
+.DS_Store
+test-results/
+playwright-report/
+public/pdfjs/
+public/ocr/
+tests/capturas/

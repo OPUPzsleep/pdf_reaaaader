@@ -1,0 +1,65 @@
+appId: com.opupzsleep.pdfreaaaader
+productName: pdfreaaaader
+copyright: Copyright © pdfreaaaader
+directories:
+  output: release
+  buildResources: build
+
+# Solo se empaquetan la interfaz compilada, el proceso principal y los módulos nativos (sharp, onnxruntime-node).
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - build/icon.png
+  - "!**/*.map"
+  - "!**/node_modules/*/{README.md,readme.md,CHANGELOG.md,LICENSE.md}"
+  # onnxruntime-node trae los binarios de todos los sistemas: solo hace falta el de Windows
+  - "!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,linux}/**"
+  - "!**/node_modules/@img/sharp-{linux,linuxmusl,darwin}*/**"
+  - "!**/node_modules/@img/sharp-libvips-{linux,linuxmusl,darwin}*/**"
+
+asar: true
+asarUnpack:
+  - "**/node_modules/sharp/**"
+  - "**/node_modules/@img/**"
+  - "**/node_modules/onnxruntime-node/**"
+
+# Ghostscript, Real-ESRGAN y los modelos van fuera del asar, en la carpeta resources de la app.
+# Se descargan con «npm run fetch-binaries» (scripts/fetch-binaries.ps1).
+extraResources:
+  - from: resources
+    to: .
+    filter:
+      - "**/*"
+      - "!.gitkeep"
+      - "!README.md"
+
+npmRebuild: false
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  # En Windows se edita el .exe (icono y versión). Si compilas desde Linux, sin Wine: -c.win.signAndEditExecutable=false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: pdfreaaaader
+  language: "3082" # Español
+  artifactName: pdfreaaaader-Setup-${version}.${ext}
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: pdfreaaaader-Portable-${version}.${ext}
+
+linux:
+  icon: build/icon.png
+  target: [dir]
+  category: Office

@@ -34,7 +34,7 @@ test('home: tarjetas, buscador y tema claro/oscuro', async () => {
 test('todas las herramientas se abren sin errores', async () => {
   const { app, page } = await abrirApp();
   const ids = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid^="tarjeta-"]')).map((e) => e.getAttribute('data-testid')!.replace('tarjeta-', '')));
-  expect(ids.length).toBe(29);
+  expect(ids.length).toBe(30);
   for (const id of ids) {
     await page.evaluate((i) => (location.hash = `#/herramienta/${i}`), id);
     await page.locator(`[data-herramienta="${id}"]`).waitFor();

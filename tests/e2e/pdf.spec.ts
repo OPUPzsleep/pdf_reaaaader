@@ -6,6 +6,8 @@ import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { abrirApp, carpetaTemporal, irA, simularGuardado, subir } from './util';
 import { crearPdf, textosPorPagina } from '../util/pdfs';
+import { ejecutarQpdf, ENTRADA, SALIDA } from '../../src/lib/pdf/qpdf';
+import { inspeccionarProteccion } from '../../src/lib/pdf/desbloquear';
 
 const dir = carpetaTemporal();
 const escribir = (nombre: string, datos: Uint8Array | Buffer) => {
@@ -153,6 +155,74 @@ test('Eliminar páginas: vista previa emergente de la página que se elimina', a
   } finally {
     await alClic.uncheck();
   }
+  await app.close();
+});
+
+const WASM_QPDF = path.resolve('node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
+
+async function cifrarPdf(datos: Uint8Array, ...args: string[]): Promise<Uint8Array> {
+  const r = await ejecutarQpdf(datos, [ENTRADA, ...args, SALIDA], WASM_QPDF, true);
+  if (!r.salida) throw new Error('qpdf no pudo cifrar el PDF de prueba');
+  return r.salida;
+}
+
+test('Desbloquear PDF: pide la contraseña, rechaza la incorrecta y guarda una copia sin protección', async () => {
+  const { app, page } = await abrirApp();
+  const original = await crearPdf(3, { texto: (i) => `Secreto ${i}` });
+  const cifrado = escribir('con-clave.pdf', await cifrarPdf(original, '--encrypt', 'abrete', 'dueno', '256', '--'));
+  const salida = path.join(dir, 'con-clave_desbloqueado.pdf');
+  await simularGuardado(app, [salida]);
+
+  await irA(page, 'desbloquear-pdf');
+  await subir(page, cifrado);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('pide una contraseña');
+  await expect(page.getByTestId('accion')).toBeDisabled(); // hasta que se escribe algo
+  await page.screenshot({ path: 'tests/capturas/desbloquear-pdf.png' });
+
+  // Contraseña incorrecta: error claro y se puede reintentar
+  await page.getByTestId('campo-clave').fill('equivocada');
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('error')).toContainText('La contraseña no es correcta');
+  await expect(page.getByTestId('resultado')).toHaveCount(0);
+
+  // Contraseña correcta (con Intro)
+  await page.getByTestId('campo-clave').fill('abrete');
+  await expect(page.getByTestId('error')).toHaveCount(0);
+  await page.getByTestId('campo-clave').press('Enter');
+  await expect(page.getByTestId('resultado')).toContainText('Sin contraseña ni restricciones');
+  const resultado = leer(salida);
+  expect(await inspeccionarProteccion(resultado, { wasm: WASM_QPDF })).toBe('sin-proteccion');
+  expect(await textosPorPagina(resultado)).toEqual(['Secreto 1', 'Secreto 2', 'Secreto 3']);
+  await app.close();
+});
+
+test('Desbloquear PDF: quita las restricciones sin pedir contraseña y avisa si no hay protección', async () => {
+  const { app, page } = await abrirApp();
+  const original = await crearPdf(2, { texto: (i) => `Texto ${i}` });
+  const restringido = escribir('restringido.pdf', await cifrarPdf(original, '--encrypt', '', 'dueno', '256', '--print=none', '--extract=n', '--'));
+  const libre = escribir('libre.pdf', original);
+  const salida = path.join(dir, 'restringido_desbloqueado.pdf');
+  await simularGuardado(app, [salida]);
+
+  await irA(page, 'desbloquear-pdf');
+  await subir(page, restringido);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('tiene restricciones');
+  await expect(page.getByTestId('campo-clave')).toHaveCount(0);
+  await page.getByTestId('accion').click();
+  await expect(page.getByTestId('resultado')).toBeVisible();
+  expect(await inspeccionarProteccion(leer(salida), { wasm: WASM_QPDF })).toBe('sin-proteccion');
+  expect(await textosPorPagina(leer(salida))).toEqual(['Texto 1', 'Texto 2']);
+
+  // Un PDF sin protección: se avisa y no hay nada que hacer
+  await page.getByRole('button', { name: 'Cambiar archivo' }).click();
+  await subir(page, libre);
+  await expect(page.getByTestId('estado-proteccion')).toContainText('no tiene contraseña ni restricciones');
+  await expect(page.getByTestId('accion')).toBeDisabled();
+
+  // Un archivo que no es un PDF se rechaza
+  await page.getByRole('button', { name: 'Cambiar archivo' }).click();
+  await subir(page, escribir('falso.pdf', Buffer.from('esto no es un pdf')));
+  await expect(page.locator('.error-texto')).toContainText('no parece un PDF válido');
   await app.close();
 });
 

@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   FileText,
   Hash,
+  LockOpen,
   Image as ImageIcon,
   ImageDown,
   Maximize2,
@@ -257,6 +258,17 @@ export const HERRAMIENTAS: Herramienta[] = [
     icono: Hash,
     componente: lazy(() => import('./numeros-de-pagina')),
     claves: ['numerar', 'paginar', 'paginacion'],
+  },
+
+  // ───────── Seguridad de PDF
+  {
+    id: 'desbloquear-pdf',
+    categoria: 'seguridad',
+    nombre: 'Desbloquear PDF',
+    descripcion: 'Quita la contraseña y las restricciones (imprimir, copiar, editar) de un PDF cuya clave conoces.',
+    icono: LockOpen,
+    componente: lazy(() => import('./desbloquear-pdf')),
+    claves: ['contraseña', 'clave', 'password', 'quitar contraseña', 'restricciones', 'permisos', 'cifrado', 'unlock', 'proteger'],
   },
 
   // ───────── Imágenes · Modificar

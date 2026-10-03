@@ -26,6 +26,7 @@ Electron + Vite + React + TypeScript. Tema claro y oscuro (se recuerda la elecci
 | | PDF a PDF/A | Ghostscript (PDF/A-2b con perfil sRGB) |
 | | **PDF a EPUB** | motor propio en JavaScript (ver más abajo) |
 | **Modificar PDF** | Rotar PDF · Números de página | `pdf-lib` (el número queda derecho aunque la página esté girada) |
+| **Seguridad de PDF** | Desbloquear PDF | `qpdf` compilado a WebAssembly (funciona sin conexión): quita la contraseña de apertura —si la conoces— y las restricciones de imprimir, copiar o editar (RC4 y AES de 128/256 bits). No adivina contraseñas |
 | **Imágenes** | Redimensionar · Recortar · Girar | `sharp`; recorte con selector visual (`react-image-crop`) |
 | | Convertir a JPG / desde JPG · HTML a IMAGEN | `sharp`; captura de página completa por trozos con el depurador de Chromium |
 

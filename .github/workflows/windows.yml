@@ -1,0 +1,63 @@
+name: Windows (instalador y pruebas)
+
+on:
+  push:
+    branches: ['claude/**', 'main']
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+
+      - name: Comprobar tipos y pruebas unitarias
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Descargar LibreOffice, Ghostscript, Real-ESRGAN y el modelo
+        run: npm run fetch-binaries
+
+      - name: Compilar instalador y versión portable
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Pruebas de humo de la app empaquetada
+        shell: pwsh
+        run: |
+          $env:PDFREAAAADER_EXE = (Resolve-Path 'release\win-unpacked\pdfreaaaader.exe').Path
+          npx playwright test tests/e2e/empaquetada.spec.ts
+
+      - name: Listar resultados
+        if: always()
+        shell: pwsh
+        run: Get-ChildItem release -File | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdfreaaaader-windows
+          path: |
+            release/*.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-y-resultados
+          path: |
+            tests/capturas/
+            test-results/
+          if-no-files-found: ignore

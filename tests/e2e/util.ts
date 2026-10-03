@@ -2,8 +2,11 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
 import path from 'node:path';
 
 export async function abrirApp(env: Record<string, string> = {}): Promise<{ app: ElectronApplication; page: Page }> {
+  // Con PDFREAAAADER_EXE se prueba la aplicación empaquetada (electron-builder) en vez del código fuente
+  const exe = process.env.PDFREAAAADER_EXE;
   const app = await electron.launch({
-    args: ['.', '--no-sandbox', '--disable-gpu', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    executablePath: exe,
+    args: [...(exe ? [] : ['.']), '--no-sandbox', '--disable-gpu', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
     cwd: path.resolve(process.cwd()),
     env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', ...env },
   });

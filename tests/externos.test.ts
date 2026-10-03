@@ -59,9 +59,11 @@ describe.skipIf(!hayGhostscript)('Ghostscript', () => {
     const original = await pdfPesado();
     const bajo = await comprimirPdf(rutas, original, 'bajo');
     const medio = await comprimirPdf(rutas, original, 'medio');
+    const alto = await comprimirPdf(rutas, original, 'alto');
     expect(bajo.reducido).toBe(true);
     expect(bajo.datos.byteLength).toBeLessThan(original.byteLength * 0.6);
     expect(bajo.datos.byteLength).toBeLessThanOrEqual(medio.datos.byteLength);
+    expect(medio.datos.byteLength).toBeLessThanOrEqual(alto.datos.byteLength);
     expect((await textosPorPagina(bajo.datos))[0]).toContain('Texto seleccionable');
     expect((await PDFDocument.load(bajo.datos)).getPageCount()).toBe(1);
   }, 120_000);

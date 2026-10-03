@@ -1,0 +1,312 @@
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+
+export { lazy };
+import {
+  ArrowDownUp,
+  BookOpen,
+  Braces,
+  Code2,
+  Crop,
+  Eraser,
+  FileCheck2,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  Hash,
+  Image as ImageIcon,
+  ImageDown,
+  Maximize2,
+  Merge,
+  Minimize2,
+  Presentation,
+  RefreshCw,
+  RotateCw,
+  ScanLine,
+  Scissors,
+  Trash2,
+  FileOutput,
+  Ruler,
+  type LucideIcon,
+} from 'lucide-react';
+import { categoriaPorId, type CategoriaId, type Familia } from './categorias';
+
+export interface Herramienta {
+  id: string;
+  categoria: CategoriaId;
+  nombre: string;
+  descripcion: string;
+  icono: LucideIcon;
+  /** Vista de la herramienta (carga diferida). Si falta, se muestra "en construcción". */
+  componente?: LazyExoticComponent<ComponentType>;
+  /** Palabras extra para el buscador */
+  claves?: string[];
+}
+
+export const HERRAMIENTAS: Herramienta[] = [
+  // ───────── Ordenar PDF
+  {
+    id: 'unir',
+    categoria: 'ordenar',
+    nombre: 'Unir PDF',
+    descripcion: 'Combina varios PDF en un solo archivo, en el orden que elijas.',
+    icono: Merge,
+    claves: ['combinar', 'juntar', 'merge'],
+  },
+  {
+    id: 'dividir',
+    categoria: 'ordenar',
+    nombre: 'Dividir PDF',
+    descripcion: 'Separa un PDF por rangos, cada N páginas o una página por archivo.',
+    icono: Scissors,
+    claves: ['separar', 'split', 'cortar'],
+  },
+  {
+    id: 'eliminar-paginas',
+    categoria: 'ordenar',
+    nombre: 'Eliminar páginas',
+    descripcion: 'Quita las páginas que no necesitas con miniaturas o rangos.',
+    icono: Trash2,
+    claves: ['borrar', 'quitar'],
+  },
+  {
+    id: 'extraer-paginas',
+    categoria: 'ordenar',
+    nombre: 'Extraer páginas',
+    descripcion: 'Conserva solo las páginas elegidas en un PDF nuevo.',
+    icono: FileOutput,
+    claves: ['sacar', 'seleccionar'],
+  },
+  {
+    id: 'ordenar',
+    categoria: 'ordenar',
+    nombre: 'Ordenar PDF',
+    descripcion: 'Reordena, gira o borra páginas arrastrando las miniaturas.',
+    icono: ArrowDownUp,
+    claves: ['organizar', 'reordenar', 'arrastrar'],
+  },
+  {
+    id: 'escanear',
+    categoria: 'ordenar',
+    nombre: 'Escanea a PDF',
+    descripcion: 'Captura documentos con la cámara o importa fotos y conviértelos en PDF.',
+    icono: ScanLine,
+    claves: ['camara', 'webcam', 'escaner', 'foto'],
+  },
+
+  // ───────── Optimizar
+  {
+    id: 'comprimir-pdf',
+    categoria: 'optimizar',
+    nombre: 'Comprimir PDF',
+    descripcion: 'Reduce el tamaño del PDF con perfiles de calidad baja, media o alta.',
+    icono: Minimize2,
+    claves: ['reducir', 'ghostscript', 'peso'],
+  },
+  {
+    id: 'comprimir-imagen',
+    categoria: 'optimizar',
+    nombre: 'Comprimir IMAGEN',
+    descripcion: 'Reduce el peso de JPG, PNG y WebP con calidad ajustable.',
+    icono: ImageDown,
+    claves: ['reducir', 'jpg', 'png', 'webp'],
+  },
+  {
+    id: 'ampliar',
+    categoria: 'optimizar',
+    nombre: 'Ampliar',
+    descripcion: 'Aumenta la resolución de una imagen x2, x3 o x4 con IA (Real-ESRGAN).',
+    icono: Maximize2,
+    claves: ['agrandar', 'upscale', 'ia', 'resolucion'],
+  },
+  {
+    id: 'eliminar-fondo',
+    categoria: 'optimizar',
+    nombre: 'Eliminar fondo',
+    descripcion: 'Quita el fondo de una imagen con IA y exporta PNG transparente.',
+    icono: Eraser,
+    claves: ['recortar fondo', 'transparente', 'ia'],
+  },
+
+  // ───────── Convertir a PDF
+  {
+    id: 'jpg-a-pdf',
+    categoria: 'a-pdf',
+    nombre: 'JPG a PDF',
+    descripcion: 'Convierte imágenes a PDF con orientación, tamaño de página y márgenes.',
+    icono: FileImage,
+    claves: ['imagen', 'png', 'foto'],
+  },
+  {
+    id: 'word-a-pdf',
+    categoria: 'a-pdf',
+    nombre: 'Word a PDF',
+    descripcion: 'Convierte documentos DOC y DOCX a PDF.',
+    icono: FileText,
+    claves: ['doc', 'docx', 'libreoffice'],
+  },
+  {
+    id: 'powerpoint-a-pdf',
+    categoria: 'a-pdf',
+    nombre: 'PowerPoint a PDF',
+    descripcion: 'Convierte presentaciones PPT y PPTX a PDF.',
+    icono: Presentation,
+    claves: ['ppt', 'pptx', 'diapositivas', 'libreoffice'],
+  },
+  {
+    id: 'excel-a-pdf',
+    categoria: 'a-pdf',
+    nombre: 'Excel a PDF',
+    descripcion: 'Convierte hojas de cálculo XLS y XLSX a PDF.',
+    icono: FileSpreadsheet,
+    claves: ['xls', 'xlsx', 'hoja', 'libreoffice'],
+  },
+  {
+    id: 'html-a-pdf',
+    categoria: 'a-pdf',
+    nombre: 'HTML a PDF',
+    descripcion: 'Convierte una página web, un archivo .html o código pegado a PDF.',
+    icono: Code2,
+    claves: ['web', 'url', 'pagina'],
+  },
+
+  // ───────── Convertir desde PDF
+  {
+    id: 'pdf-a-jpg',
+    categoria: 'desde-pdf',
+    nombre: 'PDF a JPG',
+    descripcion: 'Convierte cada página del PDF en una imagen JPG con el DPI que elijas.',
+    icono: ImageIcon,
+    claves: ['imagen', 'exportar paginas'],
+  },
+  {
+    id: 'pdf-a-word',
+    categoria: 'desde-pdf',
+    nombre: 'PDF a Word',
+    descripcion: 'Convierte un PDF en un documento Word editable (DOCX).',
+    icono: FileText,
+    claves: ['docx', 'editar', 'libreoffice'],
+  },
+  {
+    id: 'pdf-a-powerpoint',
+    categoria: 'desde-pdf',
+    nombre: 'PDF a PowerPoint',
+    descripcion: 'Convierte un PDF en una presentación PPTX.',
+    icono: Presentation,
+    claves: ['pptx', 'diapositivas', 'libreoffice'],
+  },
+  {
+    id: 'pdf-a-excel',
+    categoria: 'desde-pdf',
+    nombre: 'PDF a Excel',
+    descripcion: 'Convierte un PDF con tablas en una hoja de cálculo XLSX.',
+    icono: FileSpreadsheet,
+    claves: ['xlsx', 'tablas', 'libreoffice'],
+  },
+  {
+    id: 'pdf-a-pdfa',
+    categoria: 'desde-pdf',
+    nombre: 'PDF a PDF/A',
+    descripcion: 'Convierte un PDF al formato de archivo a largo plazo PDF/A-2.',
+    icono: FileCheck2,
+    claves: ['archivo', 'ghostscript', 'preservacion'],
+  },
+  {
+    id: 'pdf-a-epub',
+    categoria: 'desde-pdf',
+    nombre: 'PDF a EPUB',
+    descripcion: 'Convierte un PDF en un libro electrónico EPUB adaptable o de diseño fijo.',
+    icono: BookOpen,
+    claves: ['libro', 'ebook', 'kindle', 'lector', 'ocr'],
+  },
+
+  // ───────── Modificar PDF
+  {
+    id: 'rotar',
+    categoria: 'modificar',
+    nombre: 'Rotar PDF',
+    descripcion: 'Gira todas las páginas de uno o varios PDF a la vez.',
+    icono: RotateCw,
+    claves: ['girar', 'voltear'],
+  },
+  {
+    id: 'numeros-de-pagina',
+    categoria: 'modificar',
+    nombre: 'Números de página',
+    descripcion: 'Añade numeración con posición, formato, tamaño y rango a tu gusto.',
+    icono: Hash,
+    claves: ['numerar', 'paginar', 'paginacion'],
+  },
+
+  // ───────── Imágenes · Modificar
+  {
+    id: 'redimensionar',
+    categoria: 'img-modificar',
+    nombre: 'Redimensionar imagen',
+    descripcion: 'Cambia el ancho y el alto en píxeles o en porcentaje.',
+    icono: Ruler,
+    claves: ['tamano', 'escalar', 'resize'],
+  },
+  {
+    id: 'recortar',
+    categoria: 'img-modificar',
+    nombre: 'Recortar imagen',
+    descripcion: 'Recorta una zona de la imagen con un selector visual.',
+    icono: Crop,
+    claves: ['cortar', 'crop'],
+  },
+  {
+    id: 'girar-imagen',
+    categoria: 'img-modificar',
+    nombre: 'Girar imagen',
+    descripcion: 'Rota la imagen 90°, 180° o 270° y voltéala en horizontal o vertical.',
+    icono: RefreshCw,
+    claves: ['rotar', 'voltear', 'espejo'],
+  },
+
+  // ───────── Imágenes · Convertir
+  {
+    id: 'convertir-a-jpg',
+    categoria: 'img-convertir',
+    nombre: 'Convertir a JPG',
+    descripcion: 'Convierte PNG, WebP, GIF, BMP, TIFF y SVG a JPG.',
+    icono: ImageIcon,
+    claves: ['png', 'webp', 'gif', 'bmp', 'tiff', 'svg'],
+  },
+  {
+    id: 'convertir-desde-jpg',
+    categoria: 'img-convertir',
+    nombre: 'Convertir desde JPG',
+    descripcion: 'Convierte JPG a PNG, WebP o GIF.',
+    icono: Braces,
+    claves: ['png', 'webp', 'gif'],
+  },
+  {
+    id: 'html-a-imagen',
+    categoria: 'img-convertir',
+    nombre: 'HTML a IMAGEN',
+    descripcion: 'Captura una página web completa como imagen PNG o JPG.',
+    icono: Code2,
+    claves: ['captura', 'pantallazo', 'screenshot', 'web'],
+  },
+];
+
+export const herramientaPorId = (id: string) => HERRAMIENTAS.find((h) => h.id === id);
+export const familiaDe = (h: Herramienta): Familia => categoriaPorId(h.categoria).familia;
+
+export function buscar(texto: string): Herramienta[] {
+  const q = normalizar(texto);
+  if (!q) return HERRAMIENTAS;
+  return HERRAMIENTAS.filter((h) => {
+    const cat = categoriaPorId(h.categoria).nombre;
+    return normalizar([h.nombre, h.descripcion, cat, ...(h.claves ?? [])].join(' ')).includes(q);
+  });
+}
+
+export function normalizar(s: string) {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim();
+}
+

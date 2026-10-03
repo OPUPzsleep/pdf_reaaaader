@@ -136,15 +136,15 @@ export function detectarCanal(grupos: Grupo[], anchoPagina: number, previo: Cana
       finPrevio = Math.max(finPrevio, fr[i].x + fr[i].ancho);
     }
   }
-  if (intervalos.length < 5 || intervalos.length < lineasConTexto * 0.2) {
-    // Páginas con pocas líneas en columnas (final de un capítulo que sigue en dos columnas): se hereda el canal de la anterior
-    if (previo) {
-      const centro = (previo.a + previo.b) / 2;
-      const casan = relajados.filter((t) => t.a <= centro + 2 && t.b >= centro - 2).length;
-      if (casan >= 2 && casan >= relajados.length * 0.8) return previo;
-    }
-    return null;
-  }
+  // Páginas con pocas líneas en columnas (final de un capítulo que sigue en dos columnas): se hereda el canal de la anterior
+  const heredar = (): Canal | null => {
+    if (!previo) return null;
+    const centro = (previo.a + previo.b) / 2;
+    // Un hueco de verdad tiene la anchura del canal anterior (los espacios entre palabras justificadas son mucho menores)
+    const casan = relajados.filter((t) => t.a <= centro + 2 && t.b >= centro - 2 && t.b - t.a >= (previo.b - previo.a) * 0.8).length;
+    return casan >= 2 ? previo : null;
+  };
+  if (intervalos.length < 5 || intervalos.length < lineasConTexto * 0.2) return heredar();
 
   // Zona más repetida: barrido sobre los extremos de los intervalos
   const eventos: { x: number; d: number }[] = [];
@@ -158,7 +158,7 @@ export function detectarCanal(grupos: Grupo[], anchoPagina: number, previo: Cana
     cuenta += e.d;
     if (cuenta > max) max = cuenta;
   }
-  if (max < 5 || max < lineasConTexto * 0.2) return null;
+  if (max < 5 || max < lineasConTexto * 0.2) return heredar();
   // Región contigua donde el solapamiento es al menos el 80 % del máximo
   const umbral = Math.max(5, Math.ceil(max * 0.8));
   let inicio: number | null = null;
@@ -173,7 +173,7 @@ export function detectarCanal(grupos: Grupo[], anchoPagina: number, previo: Cana
       inicio = null;
     }
   }
-  if (!mejor || mejor.b - mejor.a < 3) return null;
+  if (!mejor || mejor.b - mejor.a < 3) return heredar();
   return mejor;
 }
 

@@ -33,7 +33,7 @@ $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest es mucho más rápi
 
 $raiz = Split-Path -Parent $PSScriptRoot
 $res = Join-Path $raiz 'resources'
-$tmp = Join-Path ([IO.Path]::GetTempPath()) 'pdfreaaaader-descargas'
+$tmp = if ($env:PDFREAAAADER_DESCARGAS) { $env:PDFREAAAADER_DESCARGAS } else { Join-Path ([IO.Path]::GetTempPath()) 'pdfreaaaader-descargas' }
 New-Item -ItemType Directory -Force -Path $res, $tmp | Out-Null
 
 function Quiere([string]$nombre) { -not $Solo -or ($Solo -contains $nombre) }
@@ -45,8 +45,26 @@ function Descargar([string]$url, [string]$destino) {
   }
   Write-Host "  descargando $url"
   $parcial = "$destino.parcial"
-  Invoke-WebRequest -Uri $url -OutFile $parcial -UseBasicParsing -Headers @{ 'User-Agent' = 'pdfreaaaader' }
-  Move-Item -Force $parcial $destino
+  $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+  for ($i = 1; $i -le 6; $i++) {
+    try {
+      if ($curl) {
+        # curl sigue las redirecciones y reanuda lo ya descargado (-C -): algunos espejos cortan la conexion a mitad del archivo
+        & $curl.Source -L --fail --silent --show-error -C - --connect-timeout 30 --speed-limit 20480 --speed-time 60 -A pdfreaaaader -o $parcial $url
+        if ($LASTEXITCODE -ne 0) { throw "curl termino con el codigo $LASTEXITCODE" }
+      } else {
+        Invoke-WebRequest -Uri $url -OutFile $parcial -UseBasicParsing -Headers @{ 'User-Agent' = 'pdfreaaaader' }
+      }
+      Move-Item -Force $parcial $destino
+      Write-Host ("  descargado: {0:N0} MB" -f ((Get-Item $destino).Length / 1MB))
+      return
+    } catch {
+      $tam = if (Test-Path $parcial) { '{0:N0} MB' -f ((Get-Item $parcial).Length / 1MB) } else { '0 MB' }
+      Write-Host "  intento $i fallido ($tam descargados): $(($_.Exception.Message -split "`n")[0])"
+      if ($i -eq 6) { throw }
+      Start-Sleep -Seconds (5 * $i)
+    }
+  }
 }
 
 # «Start-Process -Wait» espera también a los procesos descendientes (el servicio de msiexec, por ejemplo) y puede colgarse:

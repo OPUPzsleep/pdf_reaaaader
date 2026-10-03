@@ -27,8 +27,24 @@ jobs:
           npm run typecheck
           npm test
 
-      - name: Descargar LibreOffice, Ghostscript, Real-ESRGAN y el modelo
-        run: npm run fetch-binaries
+      # Cada programa en su paso, con límite de tiempo, para ver dónde se atasca algo (los logs solo se ven al terminar el paso)
+      - name: Descargar el modelo para quitar fondos
+        timeout-minutes: 10
+        run: npm run fetch-binaries -- -Solo modelo
+
+      - name: Descargar Real-ESRGAN
+        timeout-minutes: 10
+        run: npm run fetch-binaries -- -Solo realesrgan
+
+      - name: Descargar Ghostscript
+        timeout-minutes: 10
+        continue-on-error: true
+        run: npm run fetch-binaries -- -Solo ghostscript
+
+      - name: Descargar LibreOffice
+        timeout-minutes: 25
+        continue-on-error: true
+        run: npm run fetch-binaries -- -Solo libreoffice
 
       - name: Compilar instalador y versión portable
         run: npm run dist

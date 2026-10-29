@@ -174,7 +174,8 @@ describe('análisis de maquetación', () => {
     const figura = (k: string): RecuadroImagen => ({ clave: k, x: 50, y: 200, ancho: 200, alto: 150 });
     const icono: RecuadroImagen = { clave: 'ico', x: 50, y: 100, ancho: 10, alto: 10 };
     const fondo: RecuadroImagen = { clave: 'bg', x: 0, y: 0, ancho: 400, alto: 600 };
-    const paginas = [0, 1, 2, 3].map((i) => pagina(i, [lineaLlena('texto', 400)], i === 1 ? [logo, figura('fig1'), icono, fondo] : [logo]));
+    // Cada página con su propio texto (un texto igual en todas sería una marca de agua y no contaría)
+    const paginas = [0, 1, 2, 3].map((i) => pagina(i, [lineaLlena(`texto de la página ${i}`, 400)], i === 1 ? [logo, figura('fig1'), icono, fondo] : [logo]));
     const r = seleccionarImagenes(paginas);
     expect(r[1].map((x) => x.clave)).toEqual(['fig1']);
     expect(r[0]).toEqual([]);
@@ -305,5 +306,22 @@ describe('imágenes a página completa', () => {
     const bloques: Bloque[] = [{ tipo: 'img', imagen: r, pagina: 0, y: 250 }];
     expect(bloquesAHtml(bloques, imagenes, 'c1', (x) => x, { imagenesPaginaCompleta: true }).cuerpo).toContain('<figure class="imagen pagina-completa">');
     expect(bloquesAHtml(bloques, imagenes, 'c1', (x) => x).cuerpo).toContain('<figure class="imagen">');
+  });
+});
+
+describe('ilustraciones a toda página', () => {
+  it('una marca de agua repetida en todas las páginas no hace que se descarte la ilustración', () => {
+    const marca = () => frag('https://www.facebook.com/traductor/', 20, 50, 8);
+    const ilustracion: RecuadroImagen = { clave: 'ilus', x: 0, y: 0, ancho: 400, alto: 600 };
+    const fondo: RecuadroImagen = { clave: 'fondo', x: 0, y: 0, ancho: 400, alto: 600 };
+    const paginas = [
+      pagina(0, [marca(), lineaLlena('Texto del capítulo en la primera página.', 500)]),
+      pagina(1, [marca()], [ilustracion]),
+      pagina(2, [marca(), lineaLlena('Una página de texto con un fondo decorativo.', 500)], [fondo]),
+      pagina(3, [marca(), lineaLlena('Más texto del capítulo.', 500)]),
+    ];
+    const r = seleccionarImagenes(paginas);
+    expect(r[1]).toEqual([ilustracion]);
+    expect(r[2]).toEqual([]);
   });
 });

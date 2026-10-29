@@ -413,10 +413,15 @@ export function seleccionarImagenes(paginas: PaginaExtraida[]): RecuadroImagen[]
   const apariciones = new Map<string, number>();
   for (const p of paginas) for (const k of new Set(p.imagenes.map((i) => i.clave))) apariciones.set(k, (apariciones.get(k) ?? 0) + 1);
   const repetida = (k: string) => (apariciones.get(k) ?? 0) >= Math.max(3, Math.ceil(n * 0.25)) && n >= 4;
+  // Texto que sale en muchas páginas (marca de agua, enlace del traductor, cabecera): no es contenido de la página
+  const textoEnPaginas = new Map<string, number>();
+  for (const p of paginas) for (const t of new Set(p.fragmentos.map((f) => f.texto.trim()).filter(Boolean))) textoEnPaginas.set(t, (textoEnPaginas.get(t) ?? 0) + 1);
+  const textoComun = (t: string) => n >= 4 && (textoEnPaginas.get(t) ?? 0) >= Math.max(3, Math.ceil(n * 0.25));
 
   return paginas.map((p) => {
     const area = p.ancho * p.alto;
-    const tieneTexto = p.fragmentos.some((f) => f.texto.trim().length > 0);
+    // Una ilustración a toda página con solo la marca de agua encima sigue siendo una ilustración
+    const tieneTexto = p.fragmentos.some((f) => f.texto.trim().length > 0 && !textoComun(f.texto.trim()));
     const salida: RecuadroImagen[] = [];
     for (const im of p.imagenes) {
       if (im.ancho < 24 || im.alto < 24) continue;

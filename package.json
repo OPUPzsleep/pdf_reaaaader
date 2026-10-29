@@ -1,7 +1,7 @@
 {
   "name": "pdf_reaaaader",
   "productName": "pdfreaaaader",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "pdfreaaaader: herramientas de PDF e imágenes sin conexión, con PDF a EPUB",
   "private": true,
   "type": "module",

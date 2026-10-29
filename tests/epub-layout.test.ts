@@ -16,6 +16,8 @@ const textoDe = (b: Bloque) => (b.tipo === 'h' ? b.texto : b.tipo === 'p' || b.t
 
 /** Texto de relleno que ocupa líneas de ancho completo (50 → 350). */
 const lineaLlena = (texto: string, y: number, x = 50) => frag(texto, y, x, 11, { ancho: x === 50 ? 300 : 300 - (x - 50) });
+/** Una página de texto de verdad (unos 430 caracteres, distintos en cada página) */
+const textoDePagina = (i: number, y0 = 400) => Array.from({ length: 8 }, (_, k) => lineaLlena(`Línea ${k} de la página ${i} con bastante texto para llenar`, y0 - k * 14));
 
 describe('análisis de maquetación', () => {
   it('une líneas en párrafos y separa por espacio vertical', () => {
@@ -174,8 +176,8 @@ describe('análisis de maquetación', () => {
     const figura = (k: string): RecuadroImagen => ({ clave: k, x: 50, y: 200, ancho: 200, alto: 150 });
     const icono: RecuadroImagen = { clave: 'ico', x: 50, y: 100, ancho: 10, alto: 10 };
     const fondo: RecuadroImagen = { clave: 'bg', x: 0, y: 0, ancho: 400, alto: 600 };
-    // Cada página con su propio texto (un texto igual en todas sería una marca de agua y no contaría)
-    const paginas = [0, 1, 2, 3].map((i) => pagina(i, [lineaLlena(`texto de la página ${i}`, 400)], i === 1 ? [logo, figura('fig1'), icono, fondo] : [logo]));
+    // Cada página con su propio texto (un texto igual en todas sería una marca de agua y no contaría) y bastante, como una página de verdad
+    const paginas = [0, 1, 2, 3].map((i) => pagina(i, textoDePagina(i), i === 1 ? [logo, figura('fig1'), icono, fondo] : [logo]));
     const r = seleccionarImagenes(paginas);
     expect(r[1].map((x) => x.clave)).toEqual(['fig1']);
     expect(r[0]).toEqual([]);
@@ -310,18 +312,73 @@ describe('imágenes a página completa', () => {
 });
 
 describe('ilustraciones a toda página', () => {
-  it('una marca de agua repetida en todas las páginas no hace que se descarte la ilustración', () => {
-    const marca = () => frag('https://www.facebook.com/traductor/', 20, 50, 8);
-    const ilustracion: RecuadroImagen = { clave: 'ilus', x: 0, y: 0, ancho: 400, alto: 600 };
-    const fondo: RecuadroImagen = { clave: 'fondo', x: 0, y: 0, ancho: 400, alto: 600 };
-    const paginas = [
-      pagina(0, [marca(), lineaLlena('Texto del capítulo en la primera página.', 500)]),
-      pagina(1, [marca()], [ilustracion]),
-      pagina(2, [marca(), lineaLlena('Una página de texto con un fondo decorativo.', 500)], [fondo]),
-      pagina(3, [marca(), lineaLlena('Más texto del capítulo.', 500)]),
+  const cabecera = (i: number): Fragmento[] => [frag('Libro de prueba 9', 590, 74), frag(String(i + 1), 590, 54), frag('www.traductor.com/libro', 590, 300)];
+  const paginaCompleta = (clave: string): RecuadroImagen => ({ clave, x: 0, y: 0, ancho: 400, alto: 600 });
+  const claves = (r: RecuadroImagen[][]) => r.map((x) => x.map((im) => im.clave));
+
+  it('una ilustración con la cabecera, un enlace y un número de página distinto encima sigue siendo una ilustración', () => {
+    const paginas = Array.from({ length: 8 }, (_, i) =>
+      i === 1 || i === 4
+        ? pagina(i, cabecera(i), [paginaCompleta(`ilustracion${i}`)])
+        : pagina(i, [...cabecera(i), ...textoDePagina(i)], i === 3 ? [paginaCompleta('fondo-con-texto')] : []),
+    );
+    expect(claves(seleccionarImagenes(paginas))).toEqual([[], ['ilustracion1'], [], [], ['ilustracion4'], [], [], []]);
+  });
+
+  it('un texto corto encima (un título o un pie de foto) tampoco la descarta', () => {
+    const paginas = [0, 1, 2, 3].map((i) => (i === 1 ? pagina(i, [lineaLlena('Pie de foto de la ilustración', 300)], [paginaCompleta('ilus')]) : pagina(i, textoDePagina(i))));
+    expect(claves(seleccionarImagenes(paginas))[1]).toEqual(['ilus']);
+  });
+
+  it('las piezas de una misma imagen (trozos de un logotipo, tiras) se unen en un solo recuadro', () => {
+    const piezas: RecuadroImagen[] = [
+      { clave: 'a', x: 50, y: 400, ancho: 120, alto: 60 },
+      { clave: 'b', x: 150, y: 400, ancho: 120, alto: 60 }, // se solapa con la anterior
+      { clave: 'c', x: 270, y: 400, ancho: 80, alto: 60 }, // toca a la anterior
+      { clave: 'd', x: 50, y: 150, ancho: 100, alto: 100 }, // otra imagen, lejos
     ];
-    const r = seleccionarImagenes(paginas);
-    expect(r[1]).toEqual([ilustracion]);
-    expect(r[2]).toEqual([]);
+    const r = seleccionarImagenes([pagina(0, textoDePagina(0), piezas)])[0];
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ x: 50, y: 400, ancho: 300, alto: 60 });
+    expect(r[1].clave).toBe('d');
+  });
+
+  it('una ilustración partida en tiras vale como una sola ilustración a toda página', () => {
+    const tiras = [0, 1, 2, 3].map((k): RecuadroImagen => ({ clave: `tira${k}`, x: 0, y: 450 - k * 150, ancho: 400, alto: 150 }));
+    const sola = seleccionarImagenes([pagina(0, cabecera(0), tiras)])[0];
+    expect(sola).toHaveLength(1);
+    expect(sola[0]).toMatchObject({ x: 0, y: 0, ancho: 400, alto: 600 });
+    // Con una página de texto encima son el fondo de esa página
+    expect(seleccionarImagenes([pagina(0, [...cabecera(0), ...textoDePagina(0)], tiras)])[0]).toEqual([]);
+  });
+
+  it('no repite una imagen que ya está dentro de otra más grande', () => {
+    const grande = paginaCompleta('grande');
+    const dentro: RecuadroImagen = { clave: 'dentro', x: 100, y: 200, ancho: 150, alto: 150 };
+    expect(seleccionarImagenes([pagina(0, [], [grande, dentro])])[0]).toEqual([grande]);
+  });
+
+  it('una figura sobre un fondo con texto se conserva y el fondo no', () => {
+    const figura: RecuadroImagen = { clave: 'figura', x: 100, y: 150, ancho: 200, alto: 150 };
+    expect(claves(seleccionarImagenes([pagina(0, textoDePagina(0, 500), [paginaCompleta('fondo'), figura])]))[0]).toEqual(['figura']);
+  });
+
+  it('en un PDF escaneado con capa de texto la imagen es el fondo de la página aunque quede poco texto', () => {
+    const paginas = Array.from({ length: 10 }, (_, i) => pagina(i, i === 5 ? [lineaLlena('Fin del capítulo.', 300)] : textoDePagina(i), [paginaCompleta(`escaneo${i}`)]));
+    expect(seleccionarImagenes(paginas).flat()).toEqual([]);
+  });
+
+  it('el texto que sobresale de la figura se conserva y el que cabe dentro se quita', () => {
+    const figura: RecuadroImagen = { clave: 'fig', x: 100, y: 300, ancho: 200, alto: 100 };
+    const f = [
+      frag('Etiqueta', 330, 150, 11, { ancho: 40 }),
+      frag('Un texto que pasa por detrás de la figura y sobresale por los dos lados', 360, 50, 11, { ancho: 300 }),
+      ...textoDePagina(0, 250),
+    ];
+    const { bloques } = analizarDocumento([pagina(0, f, [figura])], OPC);
+    const todo = bloques.map(textoDe).join(' ');
+    expect(todo).toContain('sobresale por los dos lados');
+    expect(todo).not.toContain('Etiqueta');
+    expect(bloques.some((b) => b.tipo === 'img')).toBe(true);
   });
 });

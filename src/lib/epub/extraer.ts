@@ -110,7 +110,7 @@ export async function extraerPagina(
     });
   }
 
-  const imagenes: RecuadroImagen[] = opciones.imagenes && lista ? recuadrosDeImagen(lista, ops, vp.transform, alto, pagina.pageNumber) : [];
+  const imagenes: RecuadroImagen[] = opciones.imagenes && lista ? recuadrosDeImagen(lista, ops, vp.transform, ancho, alto, pagina.pageNumber) : [];
   return { indice: pagina.pageNumber - 1, ancho, alto, giro: pagina.rotate, origenY: pagina.view[1] ?? 0, fragmentos, imagenes };
 }
 
@@ -118,6 +118,7 @@ function recuadrosDeImagen(
   lista: { fnArray: number[]; argsArray: unknown[] },
   ops: OperadoresPdf,
   vpTransform: number[],
+  anchoPagina: number,
   altoPagina: number,
   numeroPagina: number,
 ): RecuadroImagen[] {
@@ -135,9 +136,14 @@ function recuadrosDeImagen(
       xs.push(m[0] * u + m[2] * v + m[4]);
       ys.push(altoPagina - (m[1] * u + m[3] * v + m[5]));
     }
-    const x = Math.min(...xs);
-    const y = Math.min(...ys);
-    salida.push({ clave, x, y, ancho: Math.max(...xs) - x, alto: Math.max(...ys) - y });
+    // Solo cuenta la parte que se ve: hay PDF que dibujan la imagen mucho más grande que la página (2550×3300 puntos en una
+    // página de 306×504) y la recortan, y entonces el recorte salía casi en blanco con la página diminuta en una esquina
+    const x = Math.max(0, Math.min(...xs));
+    const y = Math.max(0, Math.min(...ys));
+    const ancho = Math.min(anchoPagina, Math.max(...xs)) - x;
+    const alto = Math.min(altoPagina, Math.max(...ys)) - y;
+    if (ancho < 1 || alto < 1) return;
+    salida.push({ clave, x, y, ancho, alto });
   };
 
   for (let i = 0; i < lista.fnArray.length; i++) {

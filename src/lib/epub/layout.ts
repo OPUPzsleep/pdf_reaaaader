@@ -362,11 +362,13 @@ export function quitarCabeceras(paginas: PaginaExtraida[], lineasPorPagina: Line
   });
   const minimo = Math.max(2, Math.ceil(n * 0.25));
   // Distancia entre líneas de cuerpo que es normal en este documento (incluye el espacio entre párrafos)
+  // (sin las cabeceras y los pies: el salto entre una cabecera y el primer párrafo no es un salto normal del cuerpo, y en páginas
+  // cortas haría subir tanto el umbral que la cabecera ya no parecería estar aislada)
   const saltos: number[] = [];
-  for (const lineas of lineasPorPagina) {
-    const t = lineas.filter((l) => !l.imagen);
+  lineasPorPagina.forEach((lineas, i) => {
+    const t = lineas.filter((l) => !l.imagen && !zona(l, paginas[i]));
     for (let k = 1; k < t.length; k++) if (t[k].columna === t[k - 1].columna && Math.abs(t[k].tam - cuerpo) <= 1 && Math.abs(t[k - 1].tam - cuerpo) <= 1) saltos.push(t[k - 1].y - t[k].y);
-  }
+  });
   const saltoTipico = percentil(saltos, 0.95);
   let quitadas = 0;
   paginas.forEach((p, i) => {
@@ -407,6 +409,65 @@ export function quitarCabeceras(paginas: PaginaExtraida[], lineasPorPagina: Line
 
 /* ───────────────────────── Imágenes ───────────────────────── */
 
+/** Una imagen que cubre más de esta fracción de la página es una ilustración a toda página o un fondo */
+const FRACCION_PAGINA_COMPLETA = 0.6;
+/** Texto propio (sin cabeceras, números de página ni marcas de agua) que puede llevar una ilustración a toda página */
+const TEXTO_MAXIMO_EN_ILUSTRACION = 300;
+
+/**
+ * Caracteres de texto que pertenecen a la propia página: no cuentan los textos repetidos en muchas páginas
+ * (marcas de agua, el enlace del traductor, cabeceras), los números de página ni lo que está en la cabecera o el pie.
+ */
+function caracteresPropios(p: PaginaExtraida, esComun: (t: string) => boolean): number {
+  let n = 0;
+  for (const f of p.fragmentos) {
+    const t = f.texto.trim();
+    if (!t || esComun(t) || esNumeroDePagina(t)) continue;
+    if (f.y > p.alto * 0.9 || f.y < p.alto * 0.1) continue;
+    n += t.length;
+  }
+  return n;
+}
+
+/** Une en un solo recuadro las piezas de una misma imagen (tiras, recortes, máscara + imagen) que se tocan o se solapan. */
+function unirPiezas(recuadros: RecuadroImagen[], tolerancia = 2): RecuadroImagen[] {
+  const padre = recuadros.map((_, i) => i);
+  const raiz = (i: number): number => (padre[i] === i ? i : (padre[i] = raiz(padre[i])));
+  for (let i = 0; i < recuadros.length; i++) {
+    for (let j = i + 1; j < recuadros.length; j++) {
+      const a = recuadros[i];
+      const b = recuadros[j];
+      if (a.x <= b.x + b.ancho + tolerancia && b.x <= a.x + a.ancho + tolerancia && a.y <= b.y + b.alto + tolerancia && b.y <= a.y + a.alto + tolerancia) padre[raiz(i)] = raiz(j);
+    }
+  }
+  const grupos = new Map<number, RecuadroImagen[]>();
+  recuadros.forEach((r, i) => {
+    const k = raiz(i);
+    grupos.set(k, [...(grupos.get(k) ?? []), r]);
+  });
+  return [...grupos.values()].map((g) => {
+    if (g.length === 1) return g[0];
+    const x = Math.min(...g.map((r) => r.x));
+    const y = Math.min(...g.map((r) => r.y));
+    return { clave: g.map((r) => r.clave).join('+'), x, y, ancho: Math.max(...g.map((r) => r.x + r.ancho)) - x, alto: Math.max(...g.map((r) => r.y + r.alto)) - y };
+  });
+}
+
+/** Quita los recuadros que quedan dentro de otro (la imagen más grande ya los incluye al recortarse de la página). */
+function sinContenidos(recuadros: RecuadroImagen[]): RecuadroImagen[] {
+  return recuadros.filter((a, i) => {
+    const areaA = a.ancho * a.alto;
+    return !recuadros.some((b, j) => {
+      if (i === j) return false;
+      const ix = Math.max(0, Math.min(a.x + a.ancho, b.x + b.ancho) - Math.max(a.x, b.x));
+      const iy = Math.max(0, Math.min(a.y + a.alto, b.y + b.alto) - Math.max(a.y, b.y));
+      if (ix * iy < areaA * 0.9) return false;
+      const areaB = b.ancho * b.alto;
+      return areaB > areaA * 1.02 || (Math.abs(areaB - areaA) <= areaA * 0.02 && j < i);
+    });
+  });
+}
+
 /** Decide qué imágenes de cada página merecen aparecer en el libro. */
 export function seleccionarImagenes(paginas: PaginaExtraida[]): RecuadroImagen[][] {
   const n = paginas.length;
@@ -418,25 +479,34 @@ export function seleccionarImagenes(paginas: PaginaExtraida[]): RecuadroImagen[]
   for (const p of paginas) for (const t of new Set(p.fragmentos.map((f) => f.texto.trim()).filter(Boolean))) textoEnPaginas.set(t, (textoEnPaginas.get(t) ?? 0) + 1);
   const textoComun = (t: string) => n >= 4 && (textoEnPaginas.get(t) ?? 0) >= Math.max(3, Math.ceil(n * 0.25));
 
-  return paginas.map((p) => {
+  const textoPropio = paginas.map((p) => caracteresPropios(p, textoComun));
+  const textoTotal = paginas.map((p) => p.fragmentos.reduce((a, f) => a + f.texto.trim().length, 0));
+  const esGrande = (im: RecuadroImagen, p: PaginaExtraida) => im.ancho * im.alto >= p.ancho * p.alto * FRACCION_PAGINA_COMPLETA;
+  // ¿Es un PDF escaneado con capa de texto? Casi todas sus páginas son una imagen enorme con mucho texto encima.
+  // Ahí la imagen es el fondo de cada página y basta cualquier texto (hasta un número de página) para descartarla.
+  const conGrande = textoPropio.filter((_, i) => paginas[i].imagenes.some((im) => esGrande(im, paginas[i]) && !repetida(im.clave)));
+  const escaneado = conGrande.length >= Math.max(3, n * 0.4) && mediana(conGrande) >= TEXTO_MAXIMO_EN_ILUSTRACION;
+
+  return paginas.map((p, i) => {
     const area = p.ancho * p.alto;
-    // Una ilustración a toda página con solo la marca de agua encima sigue siendo una ilustración
-    const tieneTexto = p.fragmentos.some((f) => f.texto.trim().length > 0 && !textoComun(f.texto.trim()));
+    // Sin logotipos repetidos. Los fondos enormes van aparte: no se mezclan con las figuras que tienen encima.
+    const candidatas = p.imagenes.filter((im) => !repetida(im.clave));
+    const fondos = candidatas.filter((im) => esGrande(im, p));
+    const recuadros = [...fondos, ...unirPiezas(candidatas.filter((im) => !fondos.includes(im)))];
     const salida: RecuadroImagen[] = [];
-    for (const im of p.imagenes) {
+    for (const im of recuadros) {
       if (im.ancho < 24 || im.alto < 24) continue;
       const a = im.ancho * im.alto;
       if (a < area * 0.012) continue; // iconos, viñetas, filetes
-      if (repetida(im.clave)) continue; // logotipos
       const centroY = im.y + im.alto / 2;
       if (a < area * 0.05 && (centroY > p.alto * 0.92 || centroY < p.alto * 0.08)) continue;
-      // Fondo de página con texto encima: no se incluye. Sin texto es una página escaneada: sí.
-      if (a > area * 0.6 && tieneTexto) continue;
-      // Dos recuadros casi idénticos (máscara + imagen)
-      if (salida.some((o) => Math.abs(o.x - im.x) < 4 && Math.abs(o.y - im.y) < 4 && Math.abs(o.ancho - im.ancho) < 6 && Math.abs(o.alto - im.alto) < 6)) continue;
+      // Imagen enorme con texto de verdad encima: es el fondo o el escaneo de una página de texto. Una ilustración
+      // con solo la cabecera, el número de página o una marca de agua encima sigue siendo una ilustración.
+      const textoEncima = escaneado ? textoTotal[i] > 0 : textoPropio[i] > TEXTO_MAXIMO_EN_ILUSTRACION;
+      if (a >= area * FRACCION_PAGINA_COMPLETA && textoEncima) continue;
       salida.push(im);
     }
-    return salida;
+    return sinContenidos(salida);
   });
 }
 
@@ -659,15 +729,15 @@ export function analizarDocumento(paginas: PaginaExtraida[], opciones: OpcionesA
 
   const cabecerasQuitadas = opciones.quitarCabeceras ? quitarCabeceras(paginas, lineasPorPagina, tamanoCuerpo(lineasPorPagina)) : 0;
 
-  // El texto dentro de una figura ya forma parte de la imagen
+  // El texto que cabe dentro de una figura ya forma parte de la imagen. Una línea que sobresale por los lados
+  // (un párrafo que pasa por detrás de la imagen) se conserva: si no, se perdería la parte que queda fuera.
   lineasPorPagina.forEach((lineas, i) => {
     const figuras = lineas.filter((l) => l.imagen).map((l) => l.imagen!);
     if (figuras.length === 0) return;
     lineasPorPagina[i] = lineas.filter((l) => {
       if (l.imagen) return true;
       const cy = l.y + l.tam * 0.3;
-      const cx = (l.x0 + l.x1) / 2;
-      return !figuras.some((f) => cx >= f.x && cx <= f.x + f.ancho && cy >= f.y && cy <= f.y + f.alto);
+      return !figuras.some((f) => l.x0 >= f.x - 4 && l.x1 <= f.x + f.ancho + 4 && cy >= f.y && cy <= f.y + f.alto);
     });
   });
 

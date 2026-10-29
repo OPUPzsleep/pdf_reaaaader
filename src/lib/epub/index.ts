@@ -144,7 +144,12 @@ async function convertir(e: EntradaConversion): Promise<ResultadoConversion> {
   // El idioma del texto manda sobre el de los metadatos: un PDF traducido conserva a menudo el idioma del original
   const idioma = opciones.idioma !== 'auto' ? opciones.idioma : (detectarIdioma(textoMuestra) ?? meta.idioma ?? 'es');
 
-  const { capitulos, usada, subentradas } = dividirCapitulos(analisis.bloques, paginas, indiceMarcadores, opciones.capitulos, opciones.paginasPorCapitulo, titulo);
+  // La primera página ya va como portada: la ilustración de portada no se repite al principio del libro.
+  // (En un PDF escaneado la primera página es contenido, no una portada aparte: ahí se conserva.)
+  const esPortadaRepetida = (b: Bloque) =>
+    opciones.portada && !escaneado && b.tipo === 'img' && b.pagina === 0 && paginas[0] && b.imagen.ancho * b.imagen.alto >= paginas[0].ancho * paginas[0].alto * 0.6;
+  const bloquesLibro = analisis.bloques.filter((b) => !esPortadaRepetida(b));
+  const { capitulos, usada, subentradas } = dividirCapitulos(bloquesLibro, paginas, indiceMarcadores, opciones.capitulos, opciones.paginasPorCapitulo, titulo);
 
   /* Imágenes: se recortan de la página renderizada */
   const imagenes = new Map<unknown, ImagenEmpaquetada>();

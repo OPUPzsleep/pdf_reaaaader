@@ -6,8 +6,8 @@ import type { PerfilCompresion } from '../../types/api';
 import { HerramientaConversion } from '../comun/HerramientaConversion';
 
 const TEXTOS: Record<PerfilCompresion, string> = {
-  bajo: 'Compresión máxima: imágenes a 72 ppp. El archivo pesa mucho menos, pero la calidad de las imágenes baja de forma visible. Pensado para enviar por correo o ver en pantalla.',
-  medio: 'Recomendada: imágenes a 150 ppp. Buen equilibrio entre tamaño y calidad.',
+  bajo: 'Compresión máxima: imágenes a 72 ppp y todas recomprimidas en JPEG de calidad baja. El archivo pesa mucho menos, pero la calidad de las imágenes baja de forma visible. Pensado para enviar por correo o ver en pantalla.',
+  medio: 'Recomendada: imágenes a 150 ppp, recomprimidas en JPEG de buena calidad. Buen equilibrio entre tamaño y calidad.',
   alto: 'Menos compresión: imágenes a 300 ppp. Mantiene la calidad de impresión y reduce el tamaño de forma moderada.',
 };
 

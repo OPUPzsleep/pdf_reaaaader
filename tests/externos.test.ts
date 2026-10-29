@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream, decodePDFRawStream } from 'pdf-lib';
-import { comprimirPdf, estadoBinarios, localizarGhostscript, pdfAPdfA, type RutasExternas } from '../electron/lib/externos';
+import { argumentosCompresion, comprimirPdf, estadoBinarios, localizarGhostscript, pdfAPdfA, type RutasExternas } from '../electron/lib/externos';
 import { hayGhostscript } from './util/office';
 import { crearPdf, textosPorPagina } from './util/pdfs';
 
@@ -24,6 +24,19 @@ describe('localización de binarios', () => {
     const gs = path.join(dir, 'ghostscript', 'bin', process.platform === 'win32' ? 'gswin64c.exe' : 'gs');
     fs.writeFileSync(gs, '');
     expect(localizarGhostscript({ recursos: dir })).toBe(gs);
+  });
+});
+
+describe('argumentos de compresión', () => {
+  it('recomprime los JPEG y baja la resolución sin el margen de 1,5 de Ghostscript', () => {
+    const bajo = argumentosCompresion('bajo', 'e.pdf', 's.pdf');
+    expect(bajo).toEqual(expect.arrayContaining(['-dPassThroughJPEGImages=false', '-dColorImageResolution=72', '-dColorImageDownsampleThreshold=1', '-dColorImageFilter=/DCTEncode']));
+    expect(bajo.slice(-2)).toEqual(['-f', 'e.pdf']);
+    expect(bajo.find((x) => x.includes('setdistillerparams'))).toContain('/QFactor 0.9');
+    // «Menos compresión» respeta la calidad: no fuerza JPEG ni recomprime los que ya hay
+    const alto = argumentosCompresion('alto', 'e.pdf', 's.pdf');
+    expect(alto).not.toContain('-dPassThroughJPEGImages=false');
+    expect(alto).not.toContain('-dColorImageFilter=/DCTEncode');
   });
 });
 
@@ -52,6 +65,20 @@ describe.skipIf(!hayGhostscript)('Ghostscript', () => {
     expect(medio.datos.byteLength).toBeLessThanOrEqual(alto.datos.byteLength);
     expect((await textosPorPagina(bajo.datos))[0]).toContain('Texto seleccionable');
     expect((await PDFDocument.load(bajo.datos)).getPageCount()).toBe(1);
+  }, 120_000);
+
+  it('recomprime los JPEG que ya estaban por debajo del umbral de resolución (antes se copiaban tal cual)', async () => {
+    // JPEG de calidad 95 a unos 100 ppp: con los perfiles de Ghostscript tal cual no se tocaba
+    const ruido = Buffer.alloc(770 * 578 * 3);
+    for (let i = 0; i < ruido.length; i++) ruido[i] = (i * 2654435761) >>> 24;
+    const jpg = await sharp(ruido, { raw: { width: 770, height: 578, channels: 3 } }).jpeg({ quality: 95 }).toBuffer();
+    const doc = await PDFDocument.create();
+    doc.addPage([595, 842]).drawImage(await doc.embedJpg(jpg), { x: 20, y: 300, width: 555, height: 416 });
+    const original = await doc.save();
+    const medio = await comprimirPdf(rutas, original, 'medio');
+    const bajo = await comprimirPdf(rutas, original, 'bajo');
+    expect(medio.datos.byteLength).toBeLessThan(original.byteLength * 0.7);
+    expect(bajo.datos.byteLength).toBeLessThan(medio.datos.byteLength);
   }, 120_000);
 
   it('si no hay mejora devuelve el original', async () => {

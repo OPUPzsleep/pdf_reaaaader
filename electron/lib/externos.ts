@@ -169,7 +169,54 @@ export function esPdf(d: Uint8Array): boolean {
 
 /* ───────────────────────── Ghostscript ───────────────────────── */
 
-const PERFIL_GS: Record<PerfilCompresion, string> = { bajo: '/screen', medio: '/ebook', alto: '/printer' };
+interface AjustesCompresion {
+  /** Perfil base de Ghostscript */
+  base: string;
+  /** Resolución de destino de las imágenes en color y grises (ppp) */
+  ppp: number;
+  /** Resolución de las imágenes en blanco y negro (1 bit) */
+  pppMono: number;
+  /** Se reduce toda imagen que pase de ppp × umbral (Ghostscript usa 1,5 por defecto: una imagen de 100 ppp no bajaba a 72) */
+  umbral: number;
+  /** Factor de cuantización JPEG de Ghostscript: más alto, más compresión (0,15 ≈ calidad 90; 0,9 ≈ calidad 40) */
+  qFactor: number;
+  /** Volver a comprimir los JPEG del PDF (por defecto Ghostscript los copia tal cual si no cambia su resolución) */
+  recomprimirJpeg: boolean;
+}
+
+const AJUSTES: Record<PerfilCompresion, AjustesCompresion> = {
+  bajo: { base: '/screen', ppp: 72, pppMono: 200, umbral: 1.0, qFactor: 0.9, recomprimirJpeg: true },
+  medio: { base: '/ebook', ppp: 150, pppMono: 300, umbral: 1.1, qFactor: 0.5, recomprimirJpeg: true },
+  alto: { base: '/printer', ppp: 300, pppMono: 600, umbral: 1.5, qFactor: 0.15, recomprimirJpeg: false },
+};
+
+/** Argumentos de Ghostscript para comprimir con un perfil (separado para poder probarlo sin Ghostscript). */
+export function argumentosCompresion(perfil: PerfilCompresion, entrada: string, salida: string): string[] {
+  const a = AJUSTES[perfil];
+  const jpeg = `<< /QFactor ${a.qFactor} /Blend 1 /HSamples [2 1 1 2] /VSamples [2 1 1 2] >>`;
+  return [
+    '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.5', '-dNOPAUSE', '-dQUIET', '-dBATCH', '-dSAFER',
+    `-dPDFSETTINGS=${a.base}`,
+    '-dDetectDuplicateImages=true', '-dCompressFonts=true', '-dSubsetFonts=true', '-dAutoRotatePages=/None',
+    // Imágenes: bajar la resolución de todas las que pasen del objetivo, con buen filtro
+    '-dDownsampleColorImages=true', '-dDownsampleGrayImages=true', '-dDownsampleMonoImages=true',
+    '-dColorImageDownsampleType=/Bicubic', '-dGrayImageDownsampleType=/Bicubic', '-dMonoImageDownsampleType=/Subsample',
+    `-dColorImageResolution=${a.ppp}`, `-dGrayImageResolution=${a.ppp}`, `-dMonoImageResolution=${a.pppMono}`,
+    `-dColorImageDownsampleThreshold=${a.umbral}`, `-dGrayImageDownsampleThreshold=${a.umbral}`, `-dMonoImageDownsampleThreshold=${a.umbral}`,
+    // Todas las imágenes a JPEG con la calidad del perfil, también los JPEG que ya traía el PDF (como hacen los
+    // compresores web). «Menos compresión» deja el filtro automático para no estropear capturas y gráficos nítidos.
+    ...(a.recomprimirJpeg
+      ? [
+          '-dPassThroughJPEGImages=false', '-dPassThroughJPXImages=false',
+          '-dAutoFilterColorImages=false', '-dAutoFilterGrayImages=false',
+          '-dColorImageFilter=/DCTEncode', '-dGrayImageFilter=/DCTEncode',
+        ]
+      : []),
+    `-sOutputFile=${salida}`,
+    '-c', `<< /ColorImageDict ${jpeg} /GrayImageDict ${jpeg} /ColorACSImageDict ${jpeg} /GrayACSImageDict ${jpeg} >> setdistillerparams`,
+    '-f', entrada,
+  ];
+}
 
 /** Comprime un PDF. Devuelve el más pequeño entre el resultado y el original. */
 export async function comprimirPdf(r: RutasExternas, datos: Uint8Array, perfil: PerfilCompresion): Promise<{ datos: Uint8Array; reducido: boolean }> {
@@ -180,12 +227,7 @@ export async function comprimirPdf(r: RutasExternas, datos: Uint8Array, perfil: 
     const entrada = path.join(dir, 'entrada.pdf');
     const salida = path.join(dir, 'salida.pdf');
     await fsp.writeFile(entrada, aBuffer(datos));
-    const args = [
-      '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.5', '-dNOPAUSE', '-dQUIET', '-dBATCH', '-dSAFER',
-      `-dPDFSETTINGS=${PERFIL_GS[perfil]}`,
-      '-dDetectDuplicateImages=true', '-dCompressFonts=true', '-dSubsetFonts=true', '-dAutoRotatePages=/None',
-      `-sOutputFile=${salida}`, entrada,
-    ];
+    const args = argumentosCompresion(perfil, entrada, salida);
     const res = await ejecutar(gs, args, { timeoutMs: 600_000 });
     if (res.codigo !== 0 || !fs.existsSync(salida)) throw new Error(`Ghostscript no pudo procesar el PDF. ${res.error.trim().split('\n').pop() ?? ''}`.trim());
     const nuevo = new Uint8Array(await fsp.readFile(salida));

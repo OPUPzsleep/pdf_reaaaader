@@ -35,7 +35,7 @@ test.describe('PDF a EPUB en la app', () => {
     const { texto, archivos } = await leerEpub(epub);
     expect(archivos.filter((a) => /cap\d+\.xhtml$/.test(a))).toHaveLength(3);
     expect(await texto('OEBPS/content.opf')).toContain('<dc:title>El cuaderno azul</dc:title>');
-    expect(await texto('OEBPS/cap003.xhtml')).toContain('<figure class="imagen">');
+    expect(await texto('OEBPS/cap003.xhtml')).toContain('<figure class="imagen pagina-completa">');
     if (hayEpubcheck) {
       const informe = validarConEpubcheck(epub);
       expect(informe.errores, informe.errores.join('\n')).toEqual([]);

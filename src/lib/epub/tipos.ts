@@ -62,7 +62,11 @@ export interface Linea {
 }
 
 export type Bloque =
-  | { tipo: 'p'; spans: Span[]; pagina: number; y: number; tam: number; sangria: boolean; finLinea: string; col: Linea['columna']; continua: boolean; empiezaArriba: boolean }
+  | {
+      tipo: 'p'; spans: Span[]; pagina: number; y: number; tam: number; sangria: boolean; finLinea: string; col: Linea['columna']; continua: boolean; empiezaArriba: boolean;
+      /** Bloque de código: todas sus líneas van en fuente monoespaciada; los saltos de línea se conservan («\n» en los spans) */
+      codigo?: boolean;
+    }
   | { tipo: 'h'; nivel: 1 | 2 | 3; texto: string; pagina: number; y: number; tam: number }
   | { tipo: 'li'; ordenado: boolean; spans: Span[]; pagina: number; y: number; tam: number }
   | { tipo: 'img'; imagen: RecuadroImagen; pagina: number; y: number };
@@ -97,6 +101,8 @@ export interface OpcionesEpub {
   paginasPorCapitulo: number;
   quitarCabeceras: boolean;
   incluirImagenes: boolean;
+  /** Cada imagen va sola en su página y ocupa toda la pantalla del lector */
+  imagenesPaginaCompleta: boolean;
   portada: boolean;
   ocr: boolean;
   idiomaOcr: string;
@@ -111,6 +117,7 @@ export const OPCIONES_EPUB_POR_DEFECTO: OpcionesEpub = {
   paginasPorCapitulo: 15,
   quitarCabeceras: true,
   incluirImagenes: true,
+  imagenesPaginaCompleta: true,
   portada: true,
   ocr: false,
   idiomaOcr: 'spa+eng',

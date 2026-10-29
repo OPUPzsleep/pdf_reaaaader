@@ -42,7 +42,9 @@ export function bloquesAHtml(
   imagenes: Map<unknown, ImagenEmpaquetada>,
   prefijoId: string,
   rutaImagen: (ruta: string) => string,
+  opciones: { imagenesPaginaCompleta?: boolean } = {},
 ): ResultadoXhtml {
+  const claseFigura = opciones.imagenesPaginaCompleta ? 'imagen pagina-completa' : 'imagen';
   const partes: string[] = [];
   const titulos: TituloEnCapitulo[] = [];
   let lista: { ordenado: boolean; items: string[] } | null = null;
@@ -68,6 +70,9 @@ export function bloquesAHtml(
       const id = `${prefijoId}-t${++h}`;
       titulos.push({ id, texto: b.texto, nivel: b.nivel });
       partes.push(`<h${b.nivel} id="${id}">${escaparXml(b.texto)}</h${b.nivel}>`);
+    } else if (b.tipo === 'p' && b.codigo) {
+      const codigo = b.spans.map((s) => s.texto).join('');
+      if (codigo.trim()) partes.push(`<pre><code>${escaparXml(codigo)}</code></pre>`);
     } else if (b.tipo === 'p') {
       const html = spansAHtml(b.spans);
       if (html.trim()) partes.push(`<p>${html}</p>`);
@@ -76,7 +81,7 @@ export function bloquesAHtml(
       if (!im) continue;
       nImg++;
       partes.push(
-        `<figure class="imagen"><img src="${escaparXml(rutaImagen(im.ruta))}" alt="Ilustración ${nImg}" width="${im.ancho}" height="${im.alto}"/></figure>`,
+        `<figure class="${claseFigura}"><img src="${escaparXml(rutaImagen(im.ruta))}" alt="Ilustración ${nImg}" width="${im.ancho}" height="${im.alto}"/></figure>`,
       );
     }
   }
@@ -114,8 +119,12 @@ p { margin: 0 0 0.7em; text-indent: 0; orphans: 2; widows: 2; }
 ul, ol { margin: 0 0 0.9em 1.2em; padding: 0; text-align: left; }
 li { margin: 0 0 0.3em; }
 code { font-family: monospace; font-size: 0.9em; }
+pre { margin: 0 0 0.9em; padding: 0.4em 0.6em; text-align: left; white-space: pre-wrap; overflow-wrap: break-word; hyphens: none; -webkit-hyphens: none; border-left: 2px solid #ccc; }
+pre code { font-size: 0.85em; }
 figure.imagen { margin: 1.2em 0; text-align: center; page-break-inside: avoid; break-inside: avoid; }
 figure.imagen img { max-width: 100%; height: auto; }
+figure.pagina-completa { margin: 0; padding: 0; height: 95vh; display: flex; align-items: center; justify-content: center; page-break-before: always; break-before: page; page-break-after: always; break-after: page; }
+figure.pagina-completa img { width: 100%; height: 100%; max-height: 95vh; object-fit: contain; }
 nav ol { list-style: none; margin-left: 0; }
 nav li { margin: 0.3em 0; }
 section.portada { margin: 0; text-align: center; }

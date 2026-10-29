@@ -99,10 +99,12 @@ function dividirEn(
   });
 }
 
-function porTitulos(bloques: Bloque[], tituloInicio: string): Capitulo[] | null {
+function porTitulos(bloques: Bloque[], totalPaginas: number, tituloInicio: string): Capitulo[] | null {
+  // Más de un capítulo cada tres páginas son secciones, no capítulos
+  const maximo = Math.max(4, Math.ceil(totalPaginas / 3));
   for (const nivel of [1, 2, 3] as const) {
     const titulos = bloques.filter((b) => b.tipo === 'h' && b.nivel === nivel);
-    if (titulos.length >= 2) {
+    if (titulos.length >= 2 && titulos.length <= maximo) {
       const inicios = titulos.map((b) => ({ titulo: (b as Extract<Bloque, { tipo: 'h' }>).texto, pagina: b.pagina, y: b.y + 1 }));
       return dividirEn(bloques, inicios, tituloInicio);
     }
@@ -146,7 +148,7 @@ export function dividirCapitulos(
     }
   }
   if (estrategia === 'auto' || estrategia === 'titulos' || estrategia === 'marcadores') {
-    const caps = porTitulos(bloques, tituloInicio);
+    const caps = porTitulos(bloques, total, tituloInicio);
     if (caps && anotar(caps).length >= 2) return { capitulos: anotar(caps), usada: 'titulos', subentradas: [] };
   }
   const caps = porPaginas(bloques, total, paginasPorCapitulo, tituloInicio);

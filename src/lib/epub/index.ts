@@ -141,7 +141,8 @@ async function convertir(e: EntradaConversion): Promise<ResultadoConversion> {
   advertencias.push(...lectura.advertencias);
 
   const textoMuestra = analisis.bloques.filter((b): b is Extract<Bloque, { tipo: 'p' }> => b.tipo === 'p').slice(0, 200).map((b) => b.spans.map((s) => s.texto).join('')).join(' ');
-  const idioma = opciones.idioma !== 'auto' ? opciones.idioma : (meta.idioma ?? detectarIdioma(textoMuestra) ?? 'es');
+  // El idioma del texto manda sobre el de los metadatos: un PDF traducido conserva a menudo el idioma del original
+  const idioma = opciones.idioma !== 'auto' ? opciones.idioma : (detectarIdioma(textoMuestra) ?? meta.idioma ?? 'es');
 
   const { capitulos, usada, subentradas } = dividirCapitulos(analisis.bloques, paginas, indiceMarcadores, opciones.capitulos, opciones.paginasPorCapitulo, titulo);
 
@@ -155,7 +156,10 @@ async function convertir(e: EntradaConversion): Promise<ResultadoConversion> {
     const b = bloquesImagen[k];
     const r = b.imagen;
     try {
-      const px = Math.max(200, Math.min(1400, Math.round(r.ancho * 2)));
+      // A página completa la imagen se amplía hasta llenar la pantalla: se recorta con más resolución
+      const px = opciones.imagenesPaginaCompleta
+        ? Math.max(1000, Math.min(1600, Math.round(r.ancho * 4)))
+        : Math.max(200, Math.min(1400, Math.round(r.ancho * 2)));
       const out = await render.regionAImagen(b.pagina, { x: r.x, y: r.y, ancho: r.ancho, alto: r.alto }, px);
       const alto = Math.max(1, Math.round((px * r.alto) / r.ancho));
       const im: ImagenEmpaquetada = {
@@ -204,7 +208,7 @@ async function convertir(e: EntradaConversion): Promise<ResultadoConversion> {
   const textoSubentradas = subentradas.map((s) => ({ ...s, clave: normalizarClave(s.titulo) }));
   capitulos.forEach((c, i) => {
     const archivo = `cap${rellenar(i + 1, anchoNum)}.xhtml`;
-    const { cuerpo, titulos } = bloquesAHtml(c.bloques, imagenes, `c${i + 1}`, (r) => r);
+    const { cuerpo, titulos } = bloquesAHtml(c.bloques, imagenes, `c${i + 1}`, (r) => r, { imagenesPaginaCompleta: opciones.imagenesPaginaCompleta });
     documentos.push({ id: `cap${i + 1}`, archivo, xhtml: documentoXhtml({ idioma, titulo: c.titulo, cuerpo }) });
     const hijos: EntradaNav[] = [];
     // Los marcadores de menor jerarquía y los subtítulos reales del capítulo forman el segundo nivel del índice

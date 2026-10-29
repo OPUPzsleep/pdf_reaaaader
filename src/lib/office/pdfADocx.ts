@@ -127,6 +127,9 @@ async function convertir(e: EntradaPdfADocx): Promise<{ datos: Uint8Array; resum
         tipo: 'tabla',
         tabla: { filas: t.filas, cabecera: t.filasNegrita[0] === true, fusiones: t.fusiones, anchos: t.columnas.map((c) => Math.max(8, c.x1 - c.x0)) },
       });
+    } else if (b.tipo === 'p' && b.codigo) {
+      // Un párrafo por línea de código: Word no respeta los saltos de línea dentro del texto
+      for (const linea of b.spans.map((s) => s.texto).join('').split('\n')) bloques.push({ tipo: 'p', spans: [{ texto: linea, negrita: false, cursiva: false, mono: true }], sangria: false });
     } else if (b.tipo === 'p') bloques.push({ tipo: 'p', spans: b.spans, sangria: b.sangria });
     else if (b.tipo === 'h') bloques.push({ tipo: 'h', nivel: b.nivel, texto: b.texto });
     else if (b.tipo === 'li') bloques.push({ tipo: 'li', ordenado: b.ordenado, spans: b.spans });

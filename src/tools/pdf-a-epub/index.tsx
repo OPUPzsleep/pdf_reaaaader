@@ -159,6 +159,13 @@ export default function PdfAEpub() {
               <Panel titulo="Contenido">
                 <Interruptor marcado={op.quitarCabeceras} alCambiar={(v) => cambiar('quitarCabeceras', v)} texto="Quitar cabeceras, pies de página y números de página" />
                 <Interruptor marcado={op.incluirImagenes} alCambiar={(v) => cambiar('incluirImagenes', v)} texto="Incluir las imágenes" />
+                {op.incluirImagenes && (
+                  <Interruptor
+                    marcado={op.imagenesPaginaCompleta}
+                    alCambiar={(v) => cambiar('imagenesPaginaCompleta', v)}
+                    texto="Cada imagen en su propia página, a pantalla completa"
+                  />
+                )}
                 <Interruptor marcado={op.portada} alCambiar={(v) => cambiar('portada', v)} texto="Usar la primera página como portada" />
                 <Interruptor marcado={op.ocr} alCambiar={(v) => cambiar('ocr', v)} texto="Reconocer el texto de páginas escaneadas (OCR)" />
                 {op.ocr && (

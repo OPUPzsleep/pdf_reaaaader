@@ -1,6 +1,6 @@
 import type { Bloque, Fragmento, Linea, PaginaExtraida, RecuadroImagen, Span } from './tipos';
 import {
-  compactarSpans, empiezaMayuscula, empiezaMinuscula, esLineaDeIndice, limpiarTexto, marcadorDeLista,
+  compactarSpans, empiezaMayuscula, empiezaMinuscula, esLineaDeIndice, juntarLetrasEspaciadas, limpiarTexto, marcadorDeLista,
   normalizarClave, recortarSpans, terminaFrase,
 } from './texto';
 
@@ -69,8 +69,13 @@ function crearLinea(frags: Fragmento[], y: number, columna: Linea['columna']): L
   const spans: Span[] = [];
   let anterior: Fragmento | null = null;
   const tamPorCaracter = new Map<number, number>();
-  for (const f of orden) {
-    const texto = limpiarTexto(f.texto);
+  // Va pegado a la letra de un fragmento vecino (p. ej. una tilde en otra fuente: «actualizaci» + «ó» + «n y»)
+  const pegados = (a: Fragmento | undefined, b: Fragmento | undefined) =>
+    !!a && !!b && b.x - (a.x + a.ancho) < Math.min(a.tam, b.tam) * 0.15 && /\p{L}$/u.test(a.texto) && /^\p{L}/u.test(b.texto);
+  for (let k = 0; k < orden.length; k++) {
+    const f = orden[k];
+    let texto = limpiarTexto(f.texto);
+    if (!f.mono) texto = juntarLetrasEspaciadas(texto, !pegados(orden[k - 1], f) && !pegados(f, orden[k + 1]));
     if (!texto) continue;
     if (anterior) {
       const hueco = f.x - (anterior.x + anterior.ancho);
@@ -322,26 +327,38 @@ export function esNumeroDePagina(texto: string): boolean {
 
 const claveCabecera = (t: string) => t.toLowerCase().replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
 
+// Folio: número de página y título de la sección o capítulo separados por una barra («8 | Capítulo 1», «Prefacio | xiii»)
+// (los romanos, solo en minúscula: «xiii»; en mayúscula se confunden con siglas)
+const FOLIO = /^\s*(?:\d{1,4}|[ivxlcdm]{1,7})\s*[|•·]|[|•·]\s*(?:\d{1,4}|[ivxlcdm]{1,7})?\s*$/;
+// Número de página al principio o al final de la línea («Prefacio xiii», «12 Capítulo 2»)
+const NUMERO_EN_EXTREMO = /^\s*(?:\d{1,4}|[ivxlcdm]{1,7})\s+(?=\S)|(?<=\S)\s+(?:\d{1,4}|[ivxlcdm]{1,7})\s*$/;
+/** Clave de una cabecera sin el número de página: el título de la sección que la acompaña cambia poco */
+const claveSinNumero = (t: string) => claveCabecera(t.replace(NUMERO_EN_EXTREMO, ''));
+const esFolio = (l: Linea) => FOLIO.test(l.texto) && !l.spans.every((s) => s.mono || !s.texto.trim());
+
 /** Elimina cabeceras, pies y números de página de las líneas (modifica los arrays). Devuelve cuántas líneas quitó. */
 export function quitarCabeceras(paginas: PaginaExtraida[], lineasPorPagina: Linea[][], cuerpo: number): number {
   const n = paginas.length;
   const conteo = new Map<string, number>();
+  const conteoSinNumero = new Map<string, number>();
   const zona = (l: Linea, p: PaginaExtraida): 'sup' | 'inf' | null => {
     if (l.imagen) return null;
     if (l.y > p.alto * 0.9) return 'sup';
     if (l.y < p.alto * 0.1) return 'inf';
     return null;
   };
+  const contar = (mapa: Map<string, number>, claves: Set<string>) => claves.forEach((k) => mapa.set(k, (mapa.get(k) ?? 0) + 1));
   paginas.forEach((p, i) => {
-    const vistas = new Set<string>();
+    const claves = new Set<string>();
+    const sinNumero = new Set<string>();
     for (const l of lineasPorPagina[i]) {
       const z = zona(l, p);
       if (!z) continue;
-      const k = `${z}|${claveCabecera(l.texto)}`;
-      if (vistas.has(k)) continue;
-      vistas.add(k);
-      conteo.set(k, (conteo.get(k) ?? 0) + 1);
+      claves.add(`${z}|${claveCabecera(l.texto)}`);
+      sinNumero.add(`${z}|${claveSinNumero(l.texto)}`);
     }
+    contar(conteo, claves);
+    contar(conteoSinNumero, sinNumero);
   });
   const minimo = Math.max(2, Math.ceil(n * 0.25));
   // Distancia entre líneas de cuerpo que es normal en este documento (incluye el espacio entre párrafos)
@@ -355,23 +372,35 @@ export function quitarCabeceras(paginas: PaginaExtraida[], lineasPorPagina: Line
   paginas.forEach((p, i) => {
     const textoPagina = lineasPorPagina[i].filter((l) => !l.imagen);
     // Una cabecera está separada del cuerpo, o es más pequeña o cursiva; una línea normal de arriba del todo no
-    const aislada = (l: Linea, z: 'sup' | 'inf') => {
+    const aislada = (l: Linea, z: 'sup' | 'inf', ignorar: Linea[] = []) => {
       if (l.tam < cuerpo - 0.5 || (l.spans.length > 0 && l.spans.every((s) => s.cursiva))) return true;
-      const vecinas = textoPagina.filter((o) => o !== l && (z === 'sup' ? o.y < l.y : o.y > l.y));
+      const vecinas = textoPagina.filter((o) => o !== l && !ignorar.includes(o) && (z === 'sup' ? o.y < l.y : o.y > l.y));
       if (vecinas.length === 0) return true;
-      const cercana = z === 'sup' ? Math.max(...vecinas.map((o) => o.y)) : Math.min(...vecinas.map((o) => o.y));
-      return Math.abs(l.y - cercana) > Math.max(Math.max(l.tam, cuerpo) * 1.9, saltoTipico * 1.15);
+      const cercana = vecinas.reduce((a, o) => (z === 'sup' ? (o.y > a.y ? o : a) : o.y < a.y ? o : a));
+      const dy = Math.abs(l.y - cercana.y);
+      // Una cabecera en negrita junto a texto normal se distingue por el estilo aunque esté algo más cerca
+      if (l.negrita && !cercana.negrita && dy > Math.max(l.tam, cuerpo) * 1.4) return true;
+      return dy > Math.max(Math.max(l.tam, cuerpo) * 1.9, saltoTipico * 1.15);
     };
-    lineasPorPagina[i] = lineasPorPagina[i].filter((l) => {
+    // Un folio largo puede partirse en dos líneas («¿Qué es una base de datos?» + «| 5»): la otra va pegada y con el mismo estilo
+    const companeras = (l: Linea, z: 'sup' | 'inf') =>
+      textoPagina.filter((o) => o !== l && zona(o, p) === z && Math.abs(o.tam - l.tam) <= 0.5 && o.negrita === l.negrita && Math.abs(l.y - o.y) <= l.tam * 1.8);
+    const fuera = new Set<Linea>();
+    for (const l of textoPagina) {
       const z = zona(l, p);
-      if (!z) return true;
+      if (!z) continue;
       const repetida = n >= 2 && (conteo.get(`${z}|${claveCabecera(l.texto)}`) ?? 0) >= minimo && aislada(l, z);
-      if (repetida || esNumeroDePagina(l.texto)) {
-        quitadas++;
-        return false;
-      }
-      return true;
-    });
+      // El título que acompaña al número cambia con cada capítulo o sección: se reconoce por la forma del folio
+      // o porque el mismo texto aparece con números distintos en varias páginas
+      // (un rótulo más grande que el texto, como «CAPÍTULO 1» al principio de página, no es un folio)
+      const forma = l.tam <= cuerpo + 0.5 && (esFolio(l) || (NUMERO_EN_EXTREMO.test(l.texto) && (conteoSinNumero.get(`${z}|${claveSinNumero(l.texto)}`) ?? 0) >= 3));
+      const grupo = forma ? companeras(l, z) : [];
+      const folio = n >= 2 && forma && aislada(l, z, grupo) && grupo.every((o) => aislada(o, z, [l, ...grupo]));
+      if (repetida || folio || esNumeroDePagina(l.texto)) fuera.add(l);
+      if (folio) grupo.forEach((o) => fuera.add(o));
+    }
+    quitadas += fuera.size;
+    lineasPorPagina[i] = lineasPorPagina[i].filter((l) => !fuera.has(l));
   });
   return quitadas;
 }
@@ -437,11 +466,18 @@ interface ContextoDocumento {
   justificado: boolean;
 }
 
+/** Línea de código: todo su texto va en fuente monoespaciada */
+const esCodigo = (l: Linea) => !l.imagen && l.spans.some((s) => s.texto.trim()) && l.spans.every((s) => s.mono || !s.texto.trim());
+
 function esNuevoParrafo(ant: Linea | null, l: Linea, m: Margenes, ctx: ContextoDocumento): boolean {
   if (!ant) return true;
   if (ant.imagen) return true;
   const dy = ant.y - l.y;
   const mayor = Math.max(ant.tam, l.tam);
+  const codigoA = esCodigo(ant);
+  if (codigoA !== esCodigo(l)) return true;
+  // Las líneas de código seguidas forman un bloque aunque sean cortas; una línea en blanco lo separa
+  if (codigoA) return ant.columna !== l.columna || dy > mayor * 2.2;
   // Un título a ancho completo que se parte en dos líneas: la segunda, más corta, cae en la columna izquierda
   const sigueTitulo = ant.columna === 'C' && l.columna === 'I' && Math.abs(ant.tam - l.tam) < 0.5 && l.tam >= ctx.cuerpo * 1.12 && dy > 0 && dy <= l.tam * 1.7;
   if (ant.columna !== l.columna && !sigueTitulo) return true;
@@ -489,6 +525,9 @@ function unirLineas(lineas: Linea[], quitarMarca = 0): Span[] {
   return recortarSpans(spans);
 }
 
+/** Acaba en número de página (arábigo o romano en minúscula), como las entradas de un índice */
+const FIN_NUMERO = /\S\s+(?:\d{1,4}|[ivxlc]{1,6})\s*$/;
+
 const CAPITULO = /^\s*(cap[ií]tulo|chapter|parte|part|secci[oó]n|section|libro|book|pr[oó]logo|ep[ií]logo|prologue|epilogue|introducci[oó]n|introduction|conclusi[oó]n|conclusion|[ií]ndice|contents)\b/i;
 
 interface CandidatoTitulo {
@@ -515,6 +554,10 @@ function bloquesDePagina(
 
   let actual: Linea[] = [];
   let anterior: Linea | null = null;
+  // Página de índice (tabla de contenido): muchas líneas acaban en número de página. Cada entrada es su propia línea y no es un título.
+  const conTexto = lineas.filter((l) => !l.imagen);
+  const entradas = conTexto.filter((l) => FIN_NUMERO.test(l.texto)).length;
+  const paginaIndice = entradas >= 5 && entradas >= conTexto.length * 0.4;
 
   const cerrar = () => {
     if (actual.length === 0) return;
@@ -522,6 +565,15 @@ function bloquesDePagina(
     const m = margenes[primera.columna];
     const tam = Math.max(...actual.map((l) => l.tam));
     const textoPlano = actual.map((l) => l.texto).join(' ');
+    if (actual.every(esCodigo)) {
+      const spans = actual.flatMap((l, i) => (i === 0 ? l.spans : [{ ...l.spans[0], texto: '\n' }, ...l.spans]));
+      salida.push({
+        tipo: 'p', spans: recortarSpans(spans.map((s) => ({ ...s }))), pagina: indicePagina, y: primera.y, tam, sangria: false,
+        finLinea: actual[actual.length - 1].texto, col: primera.columna, continua: false, empiezaArriba: false, codigo: true,
+      });
+      actual = [];
+      return;
+    }
     let marca = marcadorDeLista(primera.texto);
     // «1. Introducción» en grande o en negrita es un título numerado, no un elemento de lista
     if (marca?.ordenado && actual.length === 1 && textoPlano.length <= 100 && !/[.:;,]$/.test(textoPlano.trim()) && (tam >= ctx.cuerpo * 1.12 && tam - ctx.cuerpo >= 1 ? true : actual[0].negrita && tam >= ctx.cuerpo - 0.5 && textoPlano.length <= 80)) marca = null;
@@ -534,7 +586,10 @@ function bloquesDePagina(
       const negritaTodo = actual.every((l) => l.negrita) && tam >= ctx.cuerpo - 0.5;
       const patron = CAPITULO.test(textoPlano) && textoPlano.length <= 80 && !terminaFrase(textoPlano.replace(/[.]$/, ''));
       const soloNumero = /^\d{1,4}$/.test(textoPlano.trim());
-      if (corto && !soloNumero && (grande || patron || (negritaTodo && textoPlano.length <= 100 && !/[.:;,]$/.test(textoPlano.trim())))) {
+      const entradaIndice = paginaIndice && FIN_NUMERO.test(textoPlano);
+      // «NOTA», «CONSEJO», «WARNING»: etiqueta de un recuadro en negrita, no un título
+      const etiqueta = !grande && /^[\p{Lu}]{2,14}:?$/u.test(textoPlano.trim());
+      if (corto && !soloNumero && !entradaIndice && !etiqueta && (grande || patron || (negritaTodo && textoPlano.length <= 100 && !/[.:;,]$/.test(textoPlano.trim())))) {
         const idx = salida.length;
         salida.push({ tipo: 'h', nivel: 3, texto: unirLineas(actual).map((s) => s.texto).join(''), pagina: indicePagina, y: primera.y, tam });
         candidatos.push({ indice: idx, tam, cuerpo: !grande });
@@ -565,7 +620,7 @@ function bloquesDePagina(
       anterior = null;
       continue;
     }
-    if (esNuevoParrafo(anterior, l, margenes[l.columna], ctx)) cerrar();
+    if (esNuevoParrafo(anterior, l, margenes[l.columna], ctx) || (paginaIndice && anterior && FIN_NUMERO.test(anterior.texto))) cerrar();
     actual.push(l);
     anterior = l;
   }
@@ -626,25 +681,39 @@ export function analizarDocumento(paginas: PaginaExtraida[], opciones: OpcionesA
   const candidatos: CandidatoTitulo[] = [];
   paginas.forEach((p, i) => bloquesDePagina(lineasPorPagina[i], p.indice, ctx, candidatos, bloques, p.ancho));
 
-  asignarNivelesDeTitulo(bloques, candidatos, cuerpo);
-  const unidos = unirEntrePaginas(bloques);
+  asignarNivelesDeTitulo(bloques, candidatos, paginas.length);
+  const unidos = unirEntrePaginas(unirRotulosDeCapitulo(bloques));
 
   const caracteres = lineasPorPagina.reduce((a, ls) => a + ls.reduce((b, l) => b + l.texto.length, 0), 0);
   const paginasSinTexto = paginas.filter((p, i) => lineasPorPagina[i].filter((l) => !l.imagen).length === 0 && p.fragmentos.length === 0).map((p) => p.indice);
   return { bloques: unidos, tamCuerpo: cuerpo, caracteres, paginasSinTexto, cabecerasQuitadas };
 }
 
-/** Asigna h1/h2/h3 agrupando los tamaños de título de mayor a menor. */
-function asignarNivelesDeTitulo(bloques: Bloque[], candidatos: CandidatoTitulo[], cuerpo: number) {
-  const tamanos: number[] = [];
+/**
+ * Asigna h1/h2/h3 agrupando los tamaños de título de mayor a menor. Los tamaños que solo salen una o dos veces
+ * en las primeras páginas (portada, portadilla, créditos) no cuentan como nivel: si no, se quedan con h1 y h2
+ * y todos los títulos del libro acaban en h3.
+ */
+function asignarNivelesDeTitulo(bloques: Bloque[], candidatos: CandidatoTitulo[], totalPaginas: number) {
+  const grupos: { tam: number; n: number; ultimaPagina: number }[] = [];
   for (const c of candidatos) {
     if (c.cuerpo) continue;
-    if (!tamanos.some((t) => Math.abs(t - c.tam) < 0.75)) tamanos.push(c.tam);
+    const pagina = bloques[c.indice].pagina;
+    const g = grupos.find((x) => Math.abs(x.tam - c.tam) < 0.75);
+    if (g) {
+      g.n++;
+      g.ultimaPagina = Math.max(g.ultimaPagina, pagina);
+    } else grupos.push({ tam: c.tam, n: 1, ultimaPagina: pagina });
   }
-  tamanos.sort((a, b) => b - a);
+  const deTapa = (g: (typeof grupos)[number]) => totalPaginas >= 20 && g.n <= 2 && g.ultimaPagina < totalPaginas * 0.1;
+  const conNivel = grupos.some((g) => !deTapa(g)) ? grupos.filter((g) => !deTapa(g)) : grupos;
+  const tamanos = conNivel.map((g) => g.tam).sort((a, b) => b - a);
   const nivelDeTam = (t: number) => {
     const i = tamanos.findIndex((x) => Math.abs(x - t) < 0.75);
-    return Math.min(3, i + 1) as 1 | 2 | 3;
+    // Un tamaño de portada va con el nivel del primer tamaño con nivel que sea menor que él, pero nunca h1:
+    // así las páginas de portada quedan juntas en el primer capítulo en vez de abrir uno cada título
+    const nivel = i >= 0 ? i + 1 : Math.max(2, tamanos.filter((x) => x > t).length + 1);
+    return Math.min(3, nivel) as 1 | 2 | 3;
   };
   for (const c of candidatos) {
     const b = bloques[c.indice];
@@ -653,7 +722,24 @@ function asignarNivelesDeTitulo(bloques: Bloque[], candidatos: CandidatoTitulo[]
     else if (CAPITULO.test(b.texto) && tamanos.length === 0) b.nivel = 1;
     else b.nivel = Math.min(3, tamanos.length + 1) as 1 | 2 | 3;
   }
-  void cuerpo;
+}
+
+const ROTULO_CAPITULO = /^\s*(?:cap[ií]tulo|chapter|parte|part|libro|book)\s+(?:\d{1,3}|[ivxlc]{1,6}|[\p{L}]{2,12})\s*$/iu;
+
+/** «CAPÍTULO 1» encima de «Curso intensivo de SQL»: un solo título «CAPÍTULO 1. Curso intensivo de SQL» con el nivel más alto de los dos. */
+function unirRotulosDeCapitulo(bloques: Bloque[]): Bloque[] {
+  const salida: Bloque[] = [];
+  for (let i = 0; i < bloques.length; i++) {
+    const b = bloques[i];
+    const sig = bloques[i + 1];
+    if (b.tipo === 'h' && sig?.tipo === 'h' && sig.pagina === b.pagina && ROTULO_CAPITULO.test(b.texto) && !ROTULO_CAPITULO.test(sig.texto)) {
+      salida.push({ ...sig, nivel: Math.min(b.nivel, sig.nivel) as 1 | 2 | 3, texto: `${b.texto.trim()}. ${sig.texto}`, y: b.y });
+      i++;
+      continue;
+    }
+    salida.push(b);
+  }
+  return salida;
 }
 
 /** Un párrafo cortado por un salto de página o de columna se vuelve a unir. */
@@ -662,7 +748,7 @@ function unirEntrePaginas(bloques: Bloque[]): Bloque[] {
   for (const b of bloques) {
     const prev = salida[salida.length - 1];
     if (
-      prev && prev.tipo === 'p' && b.tipo === 'p' &&
+      prev && prev.tipo === 'p' && b.tipo === 'p' && !prev.codigo && !b.codigo &&
       // Salto de página o paso de la columna izquierda a la derecha de la misma página
       (b.pagina === prev.pagina + 1 || (b.pagina === prev.pagina && prev.col === 'I' && b.col === 'D')) &&
       !b.sangria &&

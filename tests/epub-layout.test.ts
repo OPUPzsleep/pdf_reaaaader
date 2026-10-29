@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { analizarDocumento, detectarCanal, esNumeroDePagina, seleccionarImagenes } from '../src/lib/epub/layout';
-import { detectarIdioma, marcadorDeLista, limpiarTexto } from '../src/lib/epub/texto';
+import { dividirCapitulos } from '../src/lib/epub/capitulos';
+import { bloquesAHtml } from '../src/lib/epub/xhtml';
+import { detectarIdioma, juntarLetrasEspaciadas, marcadorDeLista, limpiarTexto } from '../src/lib/epub/texto';
 import type { Bloque, Fragmento, PaginaExtraida, RecuadroImagen } from '../src/lib/epub/tipos';
 
 const frag = (texto: string, y: number, x = 50, tam = 11, extra: Partial<Fragmento> = {}): Fragmento => ({
@@ -202,5 +204,106 @@ describe('utilidades de texto', () => {
     expect(detectarIdioma(es)).toBe('es');
     expect(detectarIdioma(en)).toBe('en');
     expect(detectarIdioma('poco texto')).toBeNull();
+  });
+});
+
+describe('libros técnicos maquetados (folios, código, espaciado entre letras, portada)', () => {
+  const cuerpo = (y0: number, n = 3, texto = 'Texto normal del cuerpo del libro de ejemplo.') => Array.from({ length: n }, (_, i) => lineaLlena(texto, y0 - i * 14));
+  const negrita = { negrita: true };
+
+  it('junta las letras de una palabra con espaciado entre caracteres', () => {
+    expect(juntarLetrasEspaciadas('e n', true)).toBe('en');
+    expect(juntarLetrasEspaciadas('v e z ,', true)).toBe('vez,');
+    expect(juntarLetrasEspaciadas('datos es el m i s m o', false)).toBe('datos es el mismo');
+    expect(juntarLetrasEspaciadas('una t a b l a . Una clave', false)).toBe('una tabla. Una clave');
+    // Dos letras sueltas dentro de un texto no se tocan (pueden ser palabras de verdad: «y o»)
+    expect(juntarLetrasEspaciadas('n y', false)).toBe('n y');
+    expect(juntarLetrasEspaciadas('Un texto normal y corriente', false)).toBe('Un texto normal y corriente');
+  });
+
+  it('une las palabras espaciadas de una línea sin pegar las que van junto a otra letra', () => {
+    const f = [
+      ...cuerpo(500),
+      frag('e n', 440, 50, 11, { ancho: 16 }), frag(' ', 440, 66, 11, { ancho: 10 }), frag('e l', 440, 76, 11, { ancho: 13 }),
+      frag(' ', 440, 89, 11, { ancho: 10 }), frag('mismo orden de la actualizaci', 440, 99, 11, { ancho: 150 }),
+      frag('ó', 440, 249, 11, { ancho: 6 }), frag('n y la otra.', 440, 255, 11, { ancho: 60 }),
+    ];
+    const { bloques } = analizarDocumento([pagina(0, f)], OPC);
+    expect(bloques.map(textoDe).join(' ')).toContain('en el mismo orden de la actualización y la otra.');
+  });
+
+  it('quita los folios con el título de la sección aunque cambie y ocupen dos líneas', () => {
+    const paginas = [0, 1, 2, 3, 4, 5].map((i) => pagina(i, [
+      ...cuerpo(560, 30, 'Contenido del libro que llena la página de arriba abajo.'),
+      ...(i % 2 === 0
+        ? [frag(`${i + 2} | Capítulo ${i + 1}: Un título largo que no`, 40, 50, 11, { ...negrita, ancho: 220 }), frag('cabe', 27, 50, 11, { ...negrita, ancho: 25 })]
+        : [frag(`Sección ${i}`, 40, 200, 11, { ...negrita, ancho: 60 }), frag(`| ${i + 2}`, 27, 200, 11, { ...negrita, ancho: 15 })]),
+    ]));
+    const { bloques } = analizarDocumento(paginas, OPC);
+    const todo = bloques.map(textoDe).join('\n');
+    expect(todo).not.toMatch(/\||Capítulo|Sección|cabe/);
+    expect(bloques.some((b) => b.tipo === 'h')).toBe(false);
+  });
+
+  it('las líneas de código forman un bloque que conserva los saltos de línea', () => {
+    const mono = { mono: true, ancho: 120 };
+    const f = [
+      ...cuerpo(500),
+      frag('SELECT nombre, edad', 440, 60, 9, mono),
+      frag('FROM personas', 430, 60, 9, mono),
+      frag('WHERE edad > 18;', 420, 60, 9, mono),
+      ...cuerpo(390),
+    ];
+    const { bloques } = analizarDocumento([pagina(0, f)], OPC);
+    const codigo = bloques.filter((b) => b.tipo === 'p' && b.codigo);
+    expect(codigo).toHaveLength(1);
+    expect(textoDe(codigo[0])).toBe('SELECT nombre, edad\nFROM personas\nWHERE edad > 18;');
+    expect(bloques.filter((b) => b.tipo === 'p' && !b.codigo)).toHaveLength(2);
+    const html = bloquesAHtml(bloques, new Map(), 'c1', (r) => r).cuerpo;
+    expect(html).toContain('<pre><code>SELECT nombre, edad\nFROM personas\nWHERE edad &gt; 18;</code></pre>');
+  });
+
+  it('los tamaños enormes de la portada no se quedan con h1 y h2; «CAPÍTULO 1» se une a su título', () => {
+    const paginas: PaginaExtraida[] = [pagina(0, [frag('SQL', 500, 50, 60, { ancho: 120 }), frag('Guía de bolsillo', 400, 50, 36, { ancho: 300 })])];
+    for (let i = 1; i < 30; i++) {
+      const f: Fragmento[] = [];
+      if (i % 8 === 1) f.push(frag(`CAPÍTULO ${(i + 7) / 8}`, 560, 50, 13, { ancho: 80 }), frag(`Tema número ${(i + 7) / 8}`, 530, 50, 20, { ancho: 200 }));
+      if (i % 4 === 3) f.push(frag(`Sección ${i}`, 500, 50, 16, { ancho: 100 }));
+      f.push(...cuerpo(470, 20));
+      paginas.push(pagina(i, f));
+    }
+    const { bloques } = analizarDocumento(paginas, OPC);
+    const titulos = bloques.filter((b): b is Extract<Bloque, { tipo: 'h' }> => b.tipo === 'h');
+    expect(titulos.filter((t) => t.nivel === 1).map((t) => t.texto)).toEqual(['CAPÍTULO 1. Tema número 1', 'CAPÍTULO 2. Tema número 2', 'CAPÍTULO 3. Tema número 3', 'CAPÍTULO 4. Tema número 4']);
+    expect(titulos.find((t) => t.texto === 'SQL')?.nivel).toBe(2);
+    expect(titulos.filter((t) => t.texto.startsWith('Sección')).every((t) => t.nivel === 2)).toBe(true);
+    const { capitulos } = dividirCapitulos(bloques, paginas, [], 'auto', 15, 'Libro');
+    expect(capitulos.map((c) => c.titulo)).toEqual(['Libro', 'CAPÍTULO 1. Tema número 1', 'CAPÍTULO 2. Tema número 2', 'CAPÍTULO 3. Tema número 3', 'CAPÍTULO 4. Tema número 4']);
+  });
+
+  it('las entradas de una página de índice no son títulos', () => {
+    const f = ['Prefacio xi', 'Capítulo 1: Curso de SQL 1', 'Capítulo 2: Dónde escribir 13', 'Capítulo 3: El lenguaje 37', 'Capítulo 4: Consultas 53', 'Capítulo 5: Tablas 91']
+      .map((t, i) => frag(t, 500 - i * 16, 50, 11, { ...negrita, ancho: 200 }));
+    const { bloques } = analizarDocumento([pagina(0, [...f, ...cuerpo(380)])], OPC);
+    expect(bloques.filter((b) => b.tipo === 'h')).toEqual([]);
+    expect(bloques.filter((b) => b.tipo === 'p').map(textoDe).slice(0, 2)).toEqual(['Prefacio xi', 'Capítulo 1: Curso de SQL 1']);
+  });
+
+  it('no parte en un capítulo por título si salen más de uno cada tres páginas', () => {
+    const bloques: Bloque[] = Array.from({ length: 30 }, (_, i) => ({ tipo: 'h' as const, nivel: 1 as const, texto: `T${i}`, pagina: i, y: 500, tam: 16 }));
+    const paginas = Array.from({ length: 30 }, (_, i) => pagina(i, []));
+    const r = dividirCapitulos(bloques, paginas, [], 'auto', 10, 'Libro');
+    expect(r.usada).toBe('paginas');
+    expect(r.capitulos).toHaveLength(3);
+  });
+});
+
+describe('imágenes a página completa', () => {
+  it('la figura va sola en su página cuando se pide', () => {
+    const r: RecuadroImagen = { clave: 'a', x: 50, y: 100, ancho: 200, alto: 150 };
+    const imagenes = new Map<unknown, { ruta: string; tipo: 'jpeg'; datos: Uint8Array; ancho: number; alto: number }>([[r, { ruta: 'img/img001.jpg', tipo: 'jpeg', datos: new Uint8Array(), ancho: 1000, alto: 750 }]]);
+    const bloques: Bloque[] = [{ tipo: 'img', imagen: r, pagina: 0, y: 250 }];
+    expect(bloquesAHtml(bloques, imagenes, 'c1', (x) => x, { imagenesPaginaCompleta: true }).cuerpo).toContain('<figure class="imagen pagina-completa">');
+    expect(bloquesAHtml(bloques, imagenes, 'c1', (x) => x).cuerpo).toContain('<figure class="imagen">');
   });
 });

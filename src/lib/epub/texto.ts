@@ -20,6 +20,20 @@ export function limpiarTexto(s: string): string {
     .replace(SUBSTITUTO_SUELTO, '');
 }
 
+// Racha de tres o más letras sueltas separadas por un espacio: «m i s m o» (texto con espaciado entre letras)
+const RACHA_ESPACIADA = /(?<![\p{L}\p{N}])\p{L}(?: \p{L}){2,}(?: ?[.,;:])?(?![\p{L}\p{N}])/gu;
+const FRAGMENTO_ESPACIADO = /^\p{L}(?: \p{L})+(?: ?[.,;:!?])?$/u;
+
+/**
+ * Quita los espacios que pdf.js mete entre las letras de un texto con espaciado entre caracteres
+ * (justificado letra a letra): «e n» → «en», «el m i s m o» → «el mismo».
+ * `suelto`: el fragmento es una palabra aislada (no va pegado a otras letras), y basta con dos letras.
+ */
+export function juntarLetrasEspaciadas(t: string, suelto: boolean): string {
+  if (suelto && FRAGMENTO_ESPACIADO.test(t.trim())) return t.replace(/(?<=\S) (?=\S)/g, '');
+  return t.replace(RACHA_ESPACIADA, (m) => m.replace(/ /g, ''));
+}
+
 export function escaparXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

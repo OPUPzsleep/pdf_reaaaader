@@ -64,7 +64,7 @@ describe.skipIf(!hayLibreOffice)('PDF a EPUB con un libro real (LibreOffice)', (
     const c2 = await texto('OEBPS/cap002.xhtml');
     expect(c2).toMatch(/<ul>\s*<li>Fechas escritas[^<]*<\/li>\s*<li>Nombres de constelaciones[^<]*<\/li>\s*<li>Pequeños dibujos[^<]*<\/li>\s*<\/ul>/);
     const c3 = await texto('OEBPS/cap003.xhtml');
-    expect(c3).toContain('<figure class="imagen"><img src="img/img001.jpg"');
+    expect(c3).toContain('<figure class="imagen pagina-completa"><img src="img/img001.jpg"');
     expect(archivos).toContain('OEBPS/img/img001.jpg');
     expect(archivos).toContain('OEBPS/img/portada.jpg');
     expect(r.resumen.imagenes).toBe(1);
